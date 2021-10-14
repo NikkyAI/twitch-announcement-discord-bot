@@ -1,0 +1,13 @@
+version: '3.9'
+services:
+  discord_bot:
+    image: nikkyai/discordbot:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      BOT_TOKEN: "$BOT_TOKEN"
+      TWITCH_CLIENT_ID: "$TWITCH_CLIENT_ID"
+      TWITCH_CLIENT_SECRET: "$TWITCH_CLIENT_SECRET"
+    volumes:
+      - ./data:/data
+      - ./logs:/logs

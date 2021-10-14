@@ -1,0 +1,15 @@
+version: '3.9'
+services:
+  discord_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    environment:
+      BOT_TOKEN: "$BOT_TOKEN"
+      TWITCH_CLIENT_ID: "$TWITCH_CLIENT_ID"
+      TWITCH_CLIENT_SECRET: "$TWITCH_CLIENT_SECRET"
+      CONFIG_DIR: /data
+    volumes:
+      - ./data:/data
+      - ./logs:/logs

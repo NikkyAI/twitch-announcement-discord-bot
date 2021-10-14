@@ -1,0 +1,10 @@
+**
+
+!/gradle/**
+!/src/**
+!/build/libs/application.jar
+!/build.gradle.kts
+!/gradlew
+!/setting.gradle.kts
+!/version_key_rules.txt
+!/versions.properties

@@ -1,0 +1,35 @@
+<configuration packagingData="true">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %-55(%d{HH:mm:ss.SSS} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+            </pattern>
+            <!--<pattern>
+                %d{yyyy-MM-dd HH:mm:ss:SSS Z} | %5level | %40.40logger{40} | %msg%n
+            </pattern>-->
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC-STDOUT" class="ch.qos.logback.classic.AsyncAppender" queueSize="2048">
+        <appender-ref ref="STDOUT"/>
+        <includeCallerData>true</includeCallerData>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file> logs/latest.log </file>
+        <append>false</append>
+        <encoder>
+            <pattern>
+                %-55(%d{HH:mm:ss.SSS} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+            </pattern>
+            <!--<pattern>
+                %d{yyyy-MM-dd HH:mm:ss:SSS Z} | %5level | %40.40logger{40} | %msg%n
+            </pattern>-->
+        </encoder>
+    </appender>
+<!--    <root level="INFO">-->
+    <root level="DEBUG">
+        <appender-ref ref="ASYNC-STDOUT"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
