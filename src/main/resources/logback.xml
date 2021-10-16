@@ -1,4 +1,4 @@
-<configuration packagingData="true">
+<configuration packagingData="true" debug="false">
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
@@ -24,7 +24,6 @@
                 <appender-ref ref="STDOUT"/>
             </else>
         </if>
-        <appender-ref ref="STDOUT"/>
         <includeCallerData>true</includeCallerData>
     </appender>
 
