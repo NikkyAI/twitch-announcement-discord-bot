@@ -43,10 +43,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
 import mu.KotlinLogging
 import org.koin.core.component.inject
@@ -653,9 +650,11 @@ class TwitchNotificationExtension() : Extension() {
             logger.trace { "received: ${json.encodeToString(JsonObject.serializer(), this)}" }
             error(this["message"]!!.jsonPrimitive.content)
         }
+        val value = this[key] as JsonElement
+        if(value !is JsonArray) return emptyList()
         return json.decodeFromJsonElement(
             ListSerializer(serializer),
-            this[key] as? JsonArray ?: return emptyList()
+            value
         )
     }
 

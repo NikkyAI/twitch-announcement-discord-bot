@@ -43,7 +43,7 @@ dependencies {
 
     implementation("io.ktor:ktor-client-logging:_")
     implementation("io.github.microutils:kotlin-logging:_")
-    implementation("org.codehaus.janino:janino:_")
+    implementation("org.codehaus.groovy:groovy:_")
     implementation("ch.qos.logback:logback-classic:_")
 
 

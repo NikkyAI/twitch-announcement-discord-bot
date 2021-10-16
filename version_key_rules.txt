@@ -1,2 +1,11 @@
 com.kotlindiscord.kord.extensions:kord-extensions
                   ^^^^^^^^^^^^^^^
+
+io.github.microutils:kotlin-logging
+                     ^^^^^^^^^^^^^^
+
+ch.qos.logback:logback-classic
+               ^^^^^^^^^^^^^^^
+
+org.codehaus.groovy:groovy
+                    ^^^^^^
