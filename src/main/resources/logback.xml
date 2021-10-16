@@ -10,7 +10,7 @@
     <appender name="STDOUT-DOCKER" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+                [%thread] %-20(.\(%F:%L\)) %-5level - %msg %n
             </pattern>
         </encoder>
     </appender>
