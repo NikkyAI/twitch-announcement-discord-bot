@@ -3,9 +3,16 @@ COPY --chown=gradle:gradle . /home/gradle/src
 WORKDIR /home/gradle/src
 RUN gradle :shadowJar --no-daemon
 
+#FROM openjdk:17-alpine AS build
+#COPY . /src
+#WORKDIR /src
+#RUN ls -la
+#RUN ./gradlew :shadowJar --scan
+
+
 FROM openjdk:17-alpine AS runtime
 
-RUN apk --no-cache add bash
+# RUN apk --no-cache add bash
 RUN mkdir /app
 
 RUN addgroup -S user -g 1000 && \

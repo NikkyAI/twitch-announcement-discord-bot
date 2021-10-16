@@ -11,6 +11,8 @@ import com.kotlindiscord.kord.extensions.types.respond
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
 import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.core.event.message.MessageCreateEvent
+import moe.nikky.checks.hasBotControl
 import mu.KotlinLogging
 import org.koin.core.component.inject
 
@@ -20,7 +22,27 @@ class BotInfoExtension : Extension() {
     private val config: ConfigurationService by inject()
 
     private val logger = KotlinLogging.logger {}
-    private lateinit var inviteUrl: String
+    private val inviteUrl: String = run {
+        val permission = Permissions(
+            Permission.ViewChannel,
+            Permission.ManageChannels,
+            Permission.ManageRoles,
+//            Permission.ManageWebhooks,
+//            Permission.ManageMessages,
+//            Permission.ReadMessageHistory,
+//            Permission.AddReactions,
+        )
+        val scopes = listOf(
+            "bot",
+            "applications.commands"
+        )
+        "https://discord.com/api/oauth2/authorize" +
+                "?client_id=${kord.resources.applicationId.asString}" +
+                "&permissions=${permission.code.value}" +
+                "&scope=${scopes.joinToString("%20")}"
+    }. also {inviteUrl ->
+        logger.info { "invite: $inviteUrl" }
+    }
 
     inner class SetAdminRoleArgs : Arguments() {
         val role by role("role", "admin role")
@@ -36,15 +58,15 @@ class BotInfoExtension : Extension() {
                 description = "some info about the bot ($botName)"
 
                 check {
-                    hasPermission(Permission.Administrator)
+                    hasBotControl(config)
                 }
 
                 action {
 //                    val ack = interaction.acknowledgeEphemeral()
 
 //                    delay(4_000)
-                    val guild = guild?.asGuild() ?: errorMessage("cannot load guild")
-                    val state = config[guild] ?: errorMessage("error fetching data")
+                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
+                    val state = config[guild]
 
                     respond {
                         val choosableRoles = state.roleChooser.entries
@@ -56,7 +78,6 @@ class BotInfoExtension : Extension() {
 
                         content = """
                         |guild: ${guild.name}
-                        |name: ${state.botname}
                         |editable roles: 
                         ${choosableRoles.indent("|  ")}
                     """.trimMargin()
@@ -77,29 +98,21 @@ class BotInfoExtension : Extension() {
 
         }
 
+        event<MessageCreateEvent> {
+            check {
+                failIf("only process DMs") { event.guildId != null }
+                failIf("do not respond to self") { event.message.author?.id == kord.selfId }
+            }
+            action {
+                if (event.message.content.startsWith("invite")) {
+                    event.message.channel.createMessage(inviteUrl)
+                }
+            }
+        }
+
         event<GuildCreateEvent> {
             action {
                 logger.info { "guild create event" }
-
-                val permission = Permissions(
-                    Permission.ViewChannel,
-//                    Permission.ManageChannels,
-                    Permission.ManageRoles,
-                    Permission.ManageWebhooks,
-                    Permission.ManageMessages,
-//                    Permission.ReadMessageHistory,
-                    Permission.AddReactions,
-                )
-                val scopes = listOf(
-                    "bot",
-                    "applications.commands"
-                )
-                inviteUrl = "https://discord.com/api/oauth2/authorize" +
-                        "?client_id=${kord.resources.applicationId.asString}" +
-                        "&permissions=${permission.code.value}" +
-                        "&scope=${scopes.joinToString("%20")}"
-
-                logger.info { "invite: $inviteUrl" }
 
             }
         }

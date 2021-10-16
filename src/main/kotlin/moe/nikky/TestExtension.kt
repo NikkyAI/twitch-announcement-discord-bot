@@ -54,7 +54,7 @@ class TestExtension : Extension() {
             }
         }
         publicSlashCommand(::SlapArgs) {
-            name = commandPrefix+"slap"
+            name = "slap"
             description = "Get slapped!"
 
             action {
@@ -73,20 +73,8 @@ class TestExtension : Extension() {
                 }
             }
         }
-        ephemeralSlashCommand {
-            name = commandPrefix+"jump"
-            description = "break through layers of reality"
-
-            action {
-//                channel.createMessage("transferring ${user.mention} to their desired destination shortly")
-
-                this.respond {
-                    content = "transferring ${user.mention} to their desired destination shortly"
-                }
-            }
-        }
         publicSlashCommand(::BonkArgs) {
-            name = commandPrefix+"bonk"
+            name = "bonk"
             description = "bonk"
 
             action {
@@ -229,15 +217,6 @@ class TestExtension : Extension() {
             typeName = "weapon"
         )
         val weapon: Weapon get() = nullableWeapon ?: Weapon.Trout
-
-//        // A single string argument that consumes the rest of the command's arguments,
-//        // with a default value if the user doesn't provide anything for it
-//        val weapon by defaultingCoalescingString(
-//            "weapon",
-//
-//            defaultValue = "large, smelly trout",
-//            description = "What you want to slap with"
-//        )
     }
 
     inner class BonkArgs : Arguments() {

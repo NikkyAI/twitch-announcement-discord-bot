@@ -28,5 +28,3 @@ gradleEnterprise {
 }
 
 rootProject.name = "discordbot"
-
-include("nekos")

@@ -41,6 +41,9 @@ suspend fun main() {
         i18n {
             defaultLocale = SupportedLocales.ENGLISH
         }
+        chatCommands {
+            defaultPrefix = "!"
+        }
         applicationCommands {
             defaultGuild = TEST_GUILD_ID
         }

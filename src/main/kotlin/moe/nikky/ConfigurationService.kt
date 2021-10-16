@@ -4,6 +4,7 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
 import dev.kord.core.behavior.GuildBehavior
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -81,16 +82,30 @@ class ConfigurationService : KoinComponent {
         load()
     }
 
-    operator fun get(guildId: Snowflake?): BotState? {
+    suspend fun loadConfig(guild: GuildBehavior?): BotState? {
+        for (i in (0..10)) {
+            delay(200)
+            logger.info { "trying to load config" }
+            val state = getNullable(guild) ?: continue
+            logger.info { "loaded config" }
+            return state
+        }
+        return null
+    }
+
+    private fun getNullable(guildId: Snowflake?): BotState? {
         if (guildId == null) return null
         return states[guildId] ?: run {
             logger.error { "no state stored for guild $guildId" }
             null
         }
     }
+    fun getNullable(guild: GuildBehavior?): BotState? {
+        return getNullable(guild?.id)
+    }
 
-    operator fun get(guild: GuildBehavior?): BotState? {
-        return get(guild?.id)
+    operator fun get(guild: GuildBehavior?): BotState {
+        return getNullable(guild?.id) ?: relayError("error fetching configuration state")
     }
 
 
@@ -148,19 +163,17 @@ class ConfigurationService : KoinComponent {
         val guild = guildBehavior.asGuild()
         logger.info { "configuring ${guild.name}" }
 
-        serializedStates[guildBehavior.id.asString]?.resolve(guildBehavior)?.let { state ->
-            states[guildBehavior.id] = state
-            logger.info { "loaded successfully from file" }
-            return
+        val serializedConfig = serializedStates[guildBehavior.id.asString]?.also {
+            logger.info { "loaded serialized config from file for ${guild.name}" }
+        } ?: ConfigurationStateSerialized().also {
+            logger.info { "created default serialized config" }
         }
 
         logger.info { "building state" }
-        val defaultConfigState = BotState(
-            botname = guildBehavior.getMember(kord.selfId).displayName,
-            guildBehavior = guildBehavior,
-        )
+        val state = serializedConfig.resolve(kord, guildBehavior)
 
-        set(guildBehavior, defaultConfigState)
+        this[guildBehavior] = state
         logger.info { "FINISHED configuration of ${guild.name}" }
     }
+
 }

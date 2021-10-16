@@ -1,8 +1,11 @@
 package moe.nikky
 
+import com.kotlindiscord.kord.extensions.utils.selfMember
 import dev.kord.common.entity.Snowflake
+import dev.kord.core.Kord
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
+import dev.kord.core.behavior.RoleBehavior
 import dev.kord.core.behavior.channel.GuildMessageChannelBehavior
 import dev.kord.core.behavior.channel.TextChannelBehavior
 import dev.kord.core.behavior.getChannelOf
@@ -10,6 +13,7 @@ import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.firstOrNull
+import dev.kord.rest.request.KtorRequestException
 import kotlinx.coroutines.Job
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
@@ -17,12 +21,11 @@ import mu.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 data class BotState(
-    val botname: String,
     val guildBehavior: GuildBehavior,
+    val selfRole: RoleBehavior,
     val adminRole: Role? = null,
     val roleChooser: Map<String, RolePickerMessageState> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationState> = emptyMap(),
-    val twitchBackgroundJob: Job? = null,
 ) {
     fun asSerialized() = ConfigurationStateSerialized(
         adminRole = adminRole?.id,
@@ -40,13 +43,13 @@ data class TwitchNotificationState(
     val twitchUserName: String,
     val channel: TextChannelBehavior,
     val role: Role,
-    val oldMessage: MessageBehavior? = null,
+    val message: Snowflake? = null,
 ) {
     fun asSerialized(): TwitchNotificationConfig {
         return TwitchNotificationConfig(
             twitchUserName = twitchUserName,
             channel = channel.id,
-            message = oldMessage?.id,
+            message = message,
             role = role.id
         )
     }
@@ -54,16 +57,45 @@ data class TwitchNotificationState(
 
 data class RolePickerMessageState(
     val channel: GuildMessageChannelBehavior,
-    val message: MessageBehavior,
+    val messageId: Snowflake,
     val roleMapping: Map<ReactionEmoji, Role> = emptyMap(),
     val liveMessageJob: Job = Job(),
 ) {
+    suspend fun getMessageOrRelayError(): MessageBehavior? = try {
+        channel.getMessageOrNull(messageId)
+    } catch (e: KtorRequestException) {
+        logger.error { e.message }
+        relayError("cannot access message $messageId")
+    }
+
     fun asSerialized(): RolePickerMessageConfig {
         return RolePickerMessageConfig(
             channel = channel.id,
-            message = message.id,
+            message = messageId,
             roleMapping = roleMapping.entries.associate { (reactionEmoji, role) ->
                 reactionEmoji.mention to role.id
+            }
+        )
+    }
+}
+
+@Serializable
+data class ConfigurationStateSerialized(
+    val adminRole: Snowflake? = null,
+    val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
+    val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
+) {
+    suspend fun resolve(kord: Kord, guildBehavior: GuildBehavior): BotState {
+        val selfRole = guildBehavior.selfMember().roleBehaviors.first { it.asRole().managed }
+        return BotState(
+            guildBehavior = guildBehavior,
+            selfRole = selfRole,
+            adminRole = adminRole?.let { guildBehavior.getRoleOrNull(it) },
+            roleChooser = roleChooser.mapValues { (section, rolePickerConfig) ->
+                rolePickerConfig.resolve(guildBehavior)
+            },
+            twitchNotifications = twitchNotifications.mapValues { (_, value) ->
+                value.resolve(guildBehavior)
             }
         )
     }
@@ -79,7 +111,7 @@ data class RolePickerMessageConfig(
         val channel: TextChannelBehavior = guildBehavior.getChannelOf<TextChannel>(channel)
         return RolePickerMessageState(
             channel = channel,
-            message = channel.getMessage(message),
+            messageId = message,
             roleMapping = roleMapping.entries.associate { (reactionEmojiName, role) ->
                 val reactionEmoji = guildBehavior.emojis.firstOrNull { it.mention == reactionEmojiName }
                     ?.let { ReactionEmoji.from(it) }
@@ -102,34 +134,8 @@ data class TwitchNotificationConfig(
         return TwitchNotificationState(
             channel = channel,
             twitchUserName = twitchUserName,
-            oldMessage = message?.let {
-                channel.getMessageOrNull(it)
-            },
+            message = message,
             role = guildBehavior.getRole(role)
-        )
-    }
-}
-
-@Serializable
-data class ConfigurationStateSerialized(
-    val adminRole: Snowflake? = null,
-    val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
-    val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
-) {
-    suspend fun resolve(guildBehavior: GuildBehavior): BotState {
-        val kord = guildBehavior.kord
-        val botname = guildBehavior.getMember(kord.selfId).displayName
-
-        return BotState(
-            botname = botname,
-            guildBehavior = guildBehavior,
-            adminRole = adminRole?.let { guildBehavior.getRoleOrNull(it) },
-            roleChooser = roleChooser.mapValues { (section, rolePickerConfig) ->
-                rolePickerConfig.resolve(guildBehavior)
-            },
-            twitchNotifications = twitchNotifications.mapValues { (_, value) ->
-                value.resolve(guildBehavior)
-            }
         )
     }
 }

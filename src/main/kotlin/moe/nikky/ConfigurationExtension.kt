@@ -8,11 +8,8 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
-import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.Permission
-import dev.kord.common.entity.Permissions
 import dev.kord.core.event.guild.GuildCreateEvent
-import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 import org.koin.core.component.inject
 import kotlin.system.exitProcess
@@ -44,7 +41,7 @@ class ConfigurationExtension : Extension() {
 
                 action {
                     val kord = this@ConfigurationExtension.kord
-                    val guild = guild?.asGuild() ?: errorMessage("cannot load guild")
+                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
                     this@ConfigurationExtension.logger.info { "reloading configurations for ${guild.name}" }
                     config.initializeGuild(kord, guild)
 
@@ -63,8 +60,8 @@ class ConfigurationExtension : Extension() {
                 }
 
                 action {
-                    val guild = guild?.asGuild() ?: errorMessage("cannot load guild")
-                    val state = config[guild] ?: errorMessage("error fetching data")
+                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
+                    val state = config[guild]
 
                     config[guild] = state.copy(
                         adminRole = arguments.role
@@ -85,8 +82,8 @@ class ConfigurationExtension : Extension() {
                 }
 
                 action {
-                    val guild = guild?.asGuild() ?: errorMessage("cannot load guild")
-                    val state = config[guild] ?: errorMessage("error fetching data")
+                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
+                    val state = config[guild]
 
                     config[guild] = state.copy(
                         adminRole = null

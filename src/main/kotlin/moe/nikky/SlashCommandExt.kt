@@ -7,10 +7,6 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.PublicSlashC
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.types.respondEphemeral
 
-fun EphemeralSlashCommandContext<*>.errorMessage(message: String): Nothing {
-    throw DiscordRelayedException("A **error** occurred: $message")
-}
-
-fun PublicSlashCommandContext<*>.errorMessage(message: String): Nothing {
+fun relayError(message: String): Nothing {
     throw DiscordRelayedException("A **error** occurred: $message")
 }

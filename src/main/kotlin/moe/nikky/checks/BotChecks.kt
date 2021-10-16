@@ -7,17 +7,15 @@ import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
-import dev.kord.core.event.interaction.ChatInputCommandInteractionCreateEvent
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import moe.nikky.ConfigurationService
+import mu.KotlinLogging
 
+private val logger = KotlinLogging.logger{}
 
 suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: ConfigurationService) {
     val guild = guildFor(event)
-    val state = config[guild] ?: run {
-        fail("could not lookup state")
-        return
-    }
+    val state = config[guild]
 
     anyCheck(
         {
@@ -37,7 +35,32 @@ suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: Configura
     }
 }
 
+suspend fun CheckContext<InteractionCreateEvent>.hasPermissions(vararg permissions: Permission) {
+    val locale = event.getLocale()
+    val mappedPermissions = permissions.groupBy { permission ->
+        hasPermission(permission)
+        passed.also { passedState ->
+            logger.debug { "${permission.translate(locale)} : $passedState" }
+            passed = true
+        }
+    }
+    val missingPermissions = mappedPermissions[false] ?: emptyList()
+    if (missingPermissions.isNotEmpty()) {
+        val permissionNames = permissions.joinToString(", ") {
+            val name = it.translate(locale)
+            when (it) {
+                in missingPermissions -> "**$name**"
+                else -> name
+            }
+        }
+        fail("required permissions missing: $permissionNames")
+    }
+}
+
 private suspend fun <T: Event> CheckContext<T>.anyCheck(vararg checks: suspend CheckContext<T>.() -> Unit) {
+    anyCheck(checks.toList())
+}
+private suspend fun <T: Event> CheckContext<T>.anyCheck(checks: List<suspend CheckContext<T>.() -> Unit>) {
     if (!passed) {
         return
     }
