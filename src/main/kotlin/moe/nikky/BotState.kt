@@ -22,7 +22,7 @@ private val logger = KotlinLogging.logger {}
 
 data class BotState(
     val guildBehavior: GuildBehavior,
-    val selfRole: RoleBehavior,
+//    val selfRole: RoleBehavior?,
     val adminRole: Role? = null,
     val roleChooser: Map<String, RolePickerMessageState> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationState> = emptyMap(),
@@ -86,10 +86,16 @@ data class ConfigurationStateSerialized(
     val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
 ) {
     suspend fun resolve(kord: Kord, guildBehavior: GuildBehavior): BotState {
-        val selfRole = guildBehavior.selfMember().roleBehaviors.first { it.asRole().managed }
+        // 898159203829575691
+//        val selfRole = guildBehavior.selfMember().roleBehaviors.firstOrNull { it.asRole().managed }
+//        if(selfRole == null) {
+//            val guild = guildBehavior.asGuild()
+//            val selfMember = guildBehavior.selfMember()
+//            logger.error { "guild ${guild.name} is missing a managed role for ${selfMember.username} / ${selfMember.displayName}" }
+//        }
         return BotState(
             guildBehavior = guildBehavior,
-            selfRole = selfRole,
+//            selfRole = selfRole,
             adminRole = adminRole?.let { guildBehavior.getRoleOrNull(it) },
             roleChooser = roleChooser.mapValues { (section, rolePickerConfig) ->
                 rolePickerConfig.resolve(guildBehavior)

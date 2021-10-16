@@ -351,7 +351,6 @@ class TwitchNotificationExtension() : Extension() {
 
         val oldMessage = twitchNotifSetting.message?.let { twitchNotifSetting.channel.getMessageOrNull(it) }
         if (streamData != null) {
-            logger.debug { "stream data : $streamData" }
             // live
             if (oldMessage != null) {
                 val containsMention = oldMessage.content.contains("""<@&\d+>""".toRegex())
@@ -398,6 +397,8 @@ class TwitchNotificationExtension() : Extension() {
             oldMessage?.delete()
         } else {
             // offline
+
+            // TODO: delete message if VOD is disabled ?
 
             // check if it was online before
             val updateMessage = if (oldMessage != null) {
@@ -486,8 +487,9 @@ class TwitchNotificationExtension() : Extension() {
     }
 
     private suspend fun checkStreams(guild: Guild, validChannels: List<TextChannelBehavior>) = coroutineScope {
-        logger.info { "checking twitch status for '${guild.name}'" }
         val state = config[guild]
+        if(state.twitchNotifications.isEmpty()) return@coroutineScope
+        logger.info { "checking twitch status for '${guild.name}'" }
 
         //TODO: check required permission in channels
         state.twitchNotifications.map { it.value.channel }.distinct().forEach {

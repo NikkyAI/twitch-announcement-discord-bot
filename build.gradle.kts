@@ -75,17 +75,17 @@ tasks {
         dependsOn(shadowJar)
         doLast {
             exec {
-                commandLine("docker", "build", "-t", "nikkyai/discordbot:latest", "-f", "local.Dockerfile", ".")
+                commandLine("docker", "build", "-t", "nikkyai/discordbot:dev", "-f", "local.Dockerfile", ".")
             }
         }
     }
-    register("pushImage") {
-        group = "build"
-        dependsOn("buildImage")
-        doLast {
-            exec {
-                commandLine("docker", "push", "nikkyai/discordbot:latest")
-            }
-        }
-    }
+//    register("pushImage") {
+//        group = "build"
+//        dependsOn("buildImage")
+//        doLast {
+//            exec {
+//                commandLine("docker", "push", "nikkyai/discordbot:dev")
+//            }
+//        }
+//    }
 }

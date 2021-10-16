@@ -1,5 +1,7 @@
 # twitch notifications discord bot
 
+docker images: https://hub.docker.com/repository/docker/nikkyai/discordbot
+
 ## run the bot
 
 see [docker-compose.yml](./docker-compose.yml)

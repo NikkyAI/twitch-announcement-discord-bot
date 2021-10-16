@@ -25,7 +25,7 @@ class BotInfoExtension : Extension() {
     private val inviteUrl: String = run {
         val permission = Permissions(
             Permission.ViewChannel,
-            Permission.ManageChannels,
+//            Permission.ManageChannels,
             Permission.ManageRoles,
 //            Permission.ManageWebhooks,
 //            Permission.ManageMessages,
