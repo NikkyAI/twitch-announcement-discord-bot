@@ -1,35 +1,75 @@
 <configuration packagingData="true">
+    <property name="defaultPattern"
+              value="%-55(%d{dd-MM-yyyy'T'HH:mm:ssZ} [%thread] %-20(.\\(%F:%L\\))) %-5level - %msg" />
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                %-55(%d{HH:mm:ss.SSS} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+                %-55(%boldBlue(%d{dd-MM-yyyy'T'HH:mm:ssZ}) %highlight([%thread] %-20(.\(%F:%L\)))) %-5level - %msg %n
             </pattern>
-            <!--<pattern>
-                %d{yyyy-MM-dd HH:mm:ss:SSS Z} | %5level | %40.40logger{40} | %msg%n
-            </pattern>-->
+        </encoder>
+    </appender>
+
+    <appender name="STDOUT-DOCKER" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %highlight([%thread] %-20(.\(%F:%L\)))) %-5level - %msg %n
+            </pattern>
         </encoder>
     </appender>
 
     <appender name="ASYNC-STDOUT" class="ch.qos.logback.classic.AsyncAppender" queueSize="2048">
+        <if condition='property("DOCKER_LOGGING").contains("true")'>
+            <then>
+                <appender-ref ref="STDOUT-DOCKER"/>
+            </then>
+            <else>
+                <appender-ref ref="STDOUT"/>
+            </else>
+        </if>
         <appender-ref ref="STDOUT"/>
         <includeCallerData>true</includeCallerData>
     </appender>
 
+    <timestamp key="bySecond" datePattern="yyyyMMdd'T'HHmmss"/>
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file> logs/log-${bySecond}.log </file>
+        <append>false</append>
+        <encoder>
+            <pattern>
+                %-55(%d{dd-MM-yyyy'T'HH:mm:ssZ} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+            </pattern>
+        </encoder>
+    </appender>
+    <appender name="FILE_LATEST" class="ch.qos.logback.core.FileAppender">
         <file> logs/latest.log </file>
         <append>false</append>
         <encoder>
             <pattern>
-                %-55(%d{HH:mm:ss.SSS} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+                %-55(%d{dd-MM-yyyy'T'HH:mm:ssZ} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
             </pattern>
-            <!--<pattern>
-                %d{yyyy-MM-dd HH:mm:ss:SSS Z} | %5level | %40.40logger{40} | %msg%n
-            </pattern>-->
         </encoder>
     </appender>
-<!--    <root level="INFO">-->
+
+<!--
+     <appender name="TIME_BASED_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/latest.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            &lt;!&ndash; daily rollover &ndash;&gt;
+            <fileNamePattern>logs/%d{yyyy-MM-dd-HH-mm}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>
+                %-55(%d{HH:mm:ss.SSS} [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
+            </pattern>
+        </encoder>
+    </appender>
+-->
+    <!--    <root level="INFO">-->
     <root level="DEBUG">
         <appender-ref ref="ASYNC-STDOUT"/>
+        <appender-ref ref="FILE_LATEST"/>
         <appender-ref ref="FILE"/>
     </root>
 </configuration>
