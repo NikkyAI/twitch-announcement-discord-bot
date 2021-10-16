@@ -11,6 +11,7 @@ import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.botHasPermissions
+import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.Permission
 import dev.kord.core.behavior.MessageBehavior
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import moe.nikky.checks.hasBotControl
 import mu.KotlinLogging
 import org.koin.core.component.inject
+import java.util.*
 import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension() {
@@ -41,9 +43,9 @@ class RoleManagementExtension : Extension() {
     companion object {
         private val requiredPermissions = arrayOf(
             Permission.ViewChannel,
-            Permission.ManageMessages,
             Permission.SendMessages,
             Permission.AddReactions,
+            Permission.ManageMessages,
             Permission.ReadMessageHistory,
         )
     }
@@ -236,13 +238,16 @@ class RoleManagementExtension : Extension() {
                     return@action
                 }
 
-                val validChannels = state.roleChooser.map { it.value.channel }.distinct().filter {
+                state.roleChooser.map { it.value.channel }.distinct().forEach {
                     val channel = it.asChannel()
-                    val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-                    if (!hasPermissions) {
-                        logger.error { "missing permissions in channel ${channel.name}" }
+                    val missingPermissions = requiredPermissions.filterNot { permission ->
+                        channel.botHasPermissions(permission)
                     }
-                    hasPermissions
+
+                    if (missingPermissions.isNotEmpty()) {
+                        val locale = guild.preferredLocale
+                        logger.error { "missing permissions in ${guild.name} #${channel.name} ${missingPermissions.joinToString(", ") {it.translate(locale)}}" }
+                    }
                 }
 
                 state.roleChooser.forEach { (section, rolePickerMessageState) ->
