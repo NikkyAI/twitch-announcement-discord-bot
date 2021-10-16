@@ -1,6 +1,4 @@
 <configuration packagingData="true">
-    <property name="defaultPattern"
-              value="%-55(%d{dd-MM-yyyy'T'HH:mm:ssZ} [%thread] %-20(.\\(%F:%L\\))) %-5level - %msg" />
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
@@ -12,7 +10,7 @@
     <appender name="STDOUT-DOCKER" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                %highlight([%thread] %-20(.\(%F:%L\)))) %-5level - %msg %n
+                [%thread] %-20(.\(%F:%L\))) %-5level - %msg %n
             </pattern>
         </encoder>
     </appender>
