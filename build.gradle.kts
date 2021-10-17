@@ -41,11 +41,15 @@ dependencies {
 
     implementation("br.com.colman:dice-helper:_")
 
-    implementation("io.ktor:ktor-client-logging:_")
-    implementation("io.github.microutils:kotlin-logging:_")
-    implementation("org.codehaus.groovy:groovy:_")
-    implementation("ch.qos.logback:logback-classic:_")
+    implementation(Square.okio)
 
+    implementation("io.github.microutils:kotlin-logging:_")
+
+    implementation("io.klogging:klogging-jvm:_")
+    implementation("io.klogging:slf4j-klogging:_")
+
+    implementation("io.ktor:ktor-client-logging:_")
+    implementation("org.slf4j:slf4j-api:_")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")

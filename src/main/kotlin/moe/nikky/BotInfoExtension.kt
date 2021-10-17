@@ -1,6 +1,5 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.checks.hasPermission
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
@@ -12,17 +11,21 @@ import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
+import io.klogging.Klogging
+import io.klogging.context.logContext
+import io.klogging.logger
+import io.ktor.http.*
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import moe.nikky.checks.hasBotControl
-import mu.KotlinLogging
 import org.koin.core.component.inject
 
-class BotInfoExtension : Extension() {
+class BotInfoExtension : Extension(), Klogging {
     override val name: String = "Bot Info Extension"
 
     private val config: ConfigurationService by inject()
 
-    private val logger = KotlinLogging.logger {}
-    private val inviteUrl: String = run {
+    private val inviteUrl: String = runBlocking {
         val permission = Permissions(
             Permission.ViewChannel,
 //            Permission.ManageChannels,
@@ -36,12 +39,13 @@ class BotInfoExtension : Extension() {
             "bot",
             "applications.commands"
         )
-        "https://discord.com/api/oauth2/authorize" +
-                "?client_id=${kord.resources.applicationId.asString}" +
-                "&permissions=${permission.code.value}" +
-                "&scope=${scopes.joinToString("%20")}"
-    }. also {inviteUrl ->
-        logger.info { "invite: $inviteUrl" }
+        URLBuilder("https://discord.com/api/oauth2/authorize").apply {
+            parameters.append("client_id", kord.resources.applicationId.asString)
+            parameters.append("permissions", permission.code.value)
+            parameters.append("scope", scopes.joinToString(" "))
+        }.build().toString().also { inviteUrl ->
+            logger.info { "invite: $inviteUrl" }
+        }
     }
 
     inner class SetAdminRoleArgs : Arguments() {
@@ -62,25 +66,30 @@ class BotInfoExtension : Extension() {
                 }
 
                 action {
-//                    val ack = interaction.acknowledgeEphemeral()
-
-//                    delay(4_000)
                     val guild = guild?.asGuild() ?: relayError("cannot load guild")
-                    val state = config[guild]
+                    withContext(
+                        logContext(
+                            "guild" to "'${guild.name}'",
+                            "guildId" to guild.id.asString,
+                            "event" to event::class.simpleName,
+                        )
+                    ) {
+                        val state = config[guild]
 
-                    respond {
-                        val choosableRoles = state.roleChooser.entries
-                            .joinToString("\n\n") { (section, rolePickerMessageState) ->
-                                "**$section**:\n" + rolePickerMessageState.roleMapping.entries.joinToString("\n") { (reaction, role) ->
-                                    "  ${reaction.mention}: ${role.mention}"
+                        respond {
+                            val choosableRoles = state.roleChooser.entries
+                                .joinToString("\n\n") { (section, rolePickerMessageState) ->
+                                    "**$section**:\n" + rolePickerMessageState.roleMapping.entries.joinToString("\n") { (reaction, role) ->
+                                        "  ${reaction.mention}: ${role.mention}"
+                                    }
                                 }
-                            }
 
-                        content = """
+                            content = """
                         |guild: ${guild.name}
                         |editable roles: 
                         ${choosableRoles.indent("|  ")}
                     """.trimMargin()
+                        }
                     }
                 }
             }
@@ -90,8 +99,17 @@ class BotInfoExtension : Extension() {
                 description = "get invite url"
 
                 action {
-                    respond {
-                        content = inviteUrl
+                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
+                    withContext(
+                        logContext(
+                            "guild" to "'${guild.name}'",
+                            "guildId" to guild.id.asString,
+                            "event" to event::class.simpleName,
+                        )
+                    ) {
+                        respond {
+                            content = inviteUrl
+                        }
                     }
                 }
             }
@@ -112,8 +130,16 @@ class BotInfoExtension : Extension() {
 
         event<GuildCreateEvent> {
             action {
-                logger.info { "guild create event" }
-
+                val guild = event.guild
+                withContext(
+                    logContext(
+                        "guild" to "'${guild.name}'",
+                        "guildId" to guild.id.asString,
+                        "event" to event::class.simpleName,
+                    )
+                ) {
+                    logger.debugF { "guild create event" }
+                }
             }
         }
     }

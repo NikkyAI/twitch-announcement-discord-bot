@@ -6,7 +6,23 @@ services:
       BOT_TOKEN: "$BOT_TOKEN"
       TWITCH_CLIENT_ID: "$TWITCH_CLIENT_ID"
       TWITCH_CLIENT_SECRET: "$TWITCH_CLIENT_SECRET"
+      SEQ_SERVER: "http://seq:5341"
       CONFIG_DIR: /data
     volumes:
       - ./data:/data
       - ./logs:/logs
+  seq:
+    image: datalust/seq:latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_ADMINPASSWORDHASH: $PH
+    volumes:
+      - seq_data:/data
+    ports:
+      - "5380:80"
+      - "5341:5341"
+
+volumes:
+  seq_data:
+    driver: local

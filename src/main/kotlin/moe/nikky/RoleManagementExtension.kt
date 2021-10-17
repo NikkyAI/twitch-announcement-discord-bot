@@ -24,21 +24,24 @@ import dev.kord.core.firstOrNull
 import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
+import io.klogging.Klogging
+import io.klogging.context.logContext
+import io.klogging.logger
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import moe.nikky.checks.hasBotControl
 import mu.KotlinLogging
 import org.koin.core.component.inject
 import java.util.*
 import kotlin.time.ExperimentalTime
 
-class RoleManagementExtension : Extension() {
+class RoleManagementExtension : Extension(), Klogging {
     override val name: String = "Role management"
     private val config: ConfigurationService by inject()
-    private val logger = KotlinLogging.logger {}
 
     companion object {
         private val requiredPermissions = arrayOf(
@@ -232,42 +235,43 @@ class RoleManagementExtension : Extension() {
 
         event<GuildCreateEvent> {
             action {
-                val guild = event.guild
-                val state = config.loadConfig(event.guild) ?: run {
-                    logger.error { "failed to load state for '${event.guild.name}'" }
-                    return@action
-                }
-
-                state.roleChooser.map { it.value.channel }.distinct().forEach {
-                    val channel = it.asChannel()
-                    val missingPermissions = requiredPermissions.filterNot { permission ->
-                        channel.botHasPermissions(permission)
+                withLogContext(event.guild) { guild ->
+                    val state = config.loadConfig(event.guild) ?: run {
+                        logger.fatalF { "failed to load state for '${event.guild.name}'" }
+                        return@withLogContext
                     }
 
-                    if (missingPermissions.isNotEmpty()) {
-                        val locale = guild.preferredLocale
-                        logger.error { "missing permissions in ${guild.name} #${channel.name} ${missingPermissions.joinToString(", ") {it.translate(locale)}}" }
-                    }
-                }
+                    state.roleChooser.map { it.value.channel }.distinct().forEach {
+                        val channel = it.asChannel()
+                        val missingPermissions = requiredPermissions.filterNot { permission ->
+                            channel.botHasPermissions(permission)
+                        }
 
-                state.roleChooser.forEach { (section, rolePickerMessageState) ->
+                        if (missingPermissions.isNotEmpty()) {
+                            val locale = guild.preferredLocale
+                            logger.errorF { "missing permissions in ${guild.name} #${channel.name} ${missingPermissions.joinToString(", ") {it.translate(locale)}}" }
+                        }
+                    }
+
+                    state.roleChooser.forEach { (section, rolePickerMessageState) ->
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
-                    try {
-                        val message = rolePickerMessageState.getMessageOrRelayError()
-                            ?: rolePickerMessageState.channel.createMessage("placeholder for section ${section}")
-                        message.edit {
-                            content = buildMessage(
+                        try {
+                            val message = rolePickerMessageState.getMessageOrRelayError()
+                                ?: rolePickerMessageState.channel.createMessage("placeholder for section ${section}")
+                            message.edit {
+                                content = buildMessage(
+                                    section,
+                                    rolePickerMessageState
+                                )
+                            }
+                            startOnReaction(
+                                message,
                                 section,
                                 rolePickerMessageState
                             )
+                        } catch (e: DiscordRelayedException) {
+                            logger.errorF(e) { e.reason }
                         }
-                        startOnReaction(
-                            message,
-                            section,
-                            rolePickerMessageState
-                        )
-                    } catch (e: DiscordRelayedException) {
-                        logger.error(e) { e.reason }
                     }
                 }
 

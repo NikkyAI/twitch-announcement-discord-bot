@@ -8,10 +8,10 @@ import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
+import io.klogging.logger
 import moe.nikky.ConfigurationService
-import mu.KotlinLogging
 
-private val logger = KotlinLogging.logger{}
+private val logger = logger("BotChecks")
 
 suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: ConfigurationService) {
     val guild = guildFor(event)

@@ -1,5 +1,6 @@
 package moe.nikky
 
+import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.checks.hasPermission
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
@@ -10,16 +11,18 @@ import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.guild.GuildCreateEvent
+import io.klogging.Klogging
+import io.klogging.context.logContext
+import io.klogging.logger
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import org.koin.core.component.inject
 import kotlin.system.exitProcess
 
-class ConfigurationExtension : Extension() {
+class ConfigurationExtension : Extension(), Klogging {
     override val name: String = "Configuration Extension"
 
     private val config: ConfigurationService by inject()
-
-    private val logger = KotlinLogging.logger {}
 
     inner class SetAdminRoleArgs : Arguments() {
         val role by role("role", "admin role")
@@ -145,17 +148,21 @@ class ConfigurationExtension : Extension() {
 
         event<GuildCreateEvent> {
             action {
-                logger.info { "guild create event" }
+                withLogContext(event.guild) { guild ->
+                    logger.debugF { "guild create event" }
 
-                try {
-                    config.initializeGuild(kord, event.guild)
-                } catch (e: Exception) {
-                    logger.error { "failed loading config" }
-                    e.printStackTrace()
-                    exitProcess(-1)
+                    try {
+                        config.initializeGuild(kord, guild)
+                    } catch (e: DiscordRelayedException) {
+                        logger.errorF(e) { "failed loading config" }
+                        error(e.reason)
+                    } catch (e: Exception) {
+                        logger.errorF(e) { "failed loading config" }
+                        error(e.message ?: "unknown error message")
+                    }
+
+                    config.save()
                 }
-
-                config.save()
             }
         }
     }

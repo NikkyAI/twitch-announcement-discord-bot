@@ -14,11 +14,9 @@ import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.firstOrNull
 import dev.kord.rest.request.KtorRequestException
+import io.klogging.Klogging
 import kotlinx.coroutines.Job
 import kotlinx.serialization.Serializable
-import mu.KotlinLogging
-
-private val logger = KotlinLogging.logger {}
 
 data class BotState(
     val guildBehavior: GuildBehavior,
@@ -26,7 +24,7 @@ data class BotState(
     val adminRole: Role? = null,
     val roleChooser: Map<String, RolePickerMessageState> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationState> = emptyMap(),
-) {
+): Klogging {
     fun asSerialized() = ConfigurationStateSerialized(
         adminRole = adminRole?.id,
         roleChooser = roleChooser.mapValues { (section, rolePickerMessageState) ->
@@ -44,7 +42,7 @@ data class TwitchNotificationState(
     val channel: TextChannelBehavior,
     val role: Role,
     val message: Snowflake? = null,
-) {
+): Klogging {
     fun asSerialized(): TwitchNotificationConfig {
         return TwitchNotificationConfig(
             twitchUserName = twitchUserName,
@@ -60,11 +58,11 @@ data class RolePickerMessageState(
     val messageId: Snowflake,
     val roleMapping: Map<ReactionEmoji, Role> = emptyMap(),
     val liveMessageJob: Job = Job(),
-) {
+): Klogging {
     suspend fun getMessageOrRelayError(): MessageBehavior? = try {
         channel.getMessageOrNull(messageId)
     } catch (e: KtorRequestException) {
-        logger.error { e.message }
+        logger.errorF { e.message }
         relayError("cannot access message $messageId")
     }
 
@@ -84,14 +82,14 @@ data class ConfigurationStateSerialized(
     val adminRole: Snowflake? = null,
     val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
-) {
+): Klogging {
     suspend fun resolve(kord: Kord, guildBehavior: GuildBehavior): BotState {
         // 898159203829575691
 //        val selfRole = guildBehavior.selfMember().roleBehaviors.firstOrNull { it.asRole().managed }
 //        if(selfRole == null) {
 //            val guild = guildBehavior.asGuild()
 //            val selfMember = guildBehavior.selfMember()
-//            logger.error { "guild ${guild.name} is missing a managed role for ${selfMember.username} / ${selfMember.displayName}" }
+//            logger.errorF { "guild ${guild.name} is missing a managed role for ${selfMember.username} / ${selfMember.displayName}" }
 //        }
         return BotState(
             guildBehavior = guildBehavior,
@@ -112,7 +110,7 @@ data class RolePickerMessageConfig(
     val channel: Snowflake,
     val message: Snowflake,
     val roleMapping: Map<String, Snowflake>,
-) {
+): Klogging {
     suspend fun resolve(guildBehavior: GuildBehavior): RolePickerMessageState {
         val channel: TextChannelBehavior = guildBehavior.getChannelOf<TextChannel>(channel)
         return RolePickerMessageState(
@@ -134,7 +132,7 @@ data class TwitchNotificationConfig(
     val channel: Snowflake,
     val message: Snowflake?,
     val role: Snowflake,
-) {
+): Klogging {
     suspend fun resolve(guildBehavior: GuildBehavior): TwitchNotificationState {
         val channel = guildBehavior.getChannelOf<TextChannel>(channel)
         return TwitchNotificationState(

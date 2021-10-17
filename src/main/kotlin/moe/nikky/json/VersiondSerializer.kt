@@ -1,17 +1,20 @@
 package moe.nikky.json
 
+import io.klogging.Klogging
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.*
+import moe.nikky.debugF
 import mu.KotlinLogging
-
-private val logger = KotlinLogging.logger{}
 
 data class VersionMigrator<T : Any, R : Any>(
     val json: Json,
     val old: KSerializer<T>,
     val new: KSerializer<R>,
     val converter: (T) -> R,
-) {
+): Klogging {
     fun migrate(
         jsonObject: JsonObject,
         newGeneration: Int,
@@ -30,7 +33,7 @@ class VersionedSerializer<T : Any>(
     val currentVersion: Int,
     val migrations: Map<IntRange, VersionMigrator<*, *>>,
     val versionKey: String = "formatVersion",
-) : JsonTransformingSerializer<T>(serializer) {
+) : JsonTransformingSerializer<T>(serializer), Klogging {
     override fun transformDeserialize(element: JsonElement): JsonElement {
         var jsonObject = super.transformDeserialize(element).jsonObject
 
@@ -39,7 +42,10 @@ class VersionedSerializer<T : Any>(
             if (version != currentVersion) {
                 val migrationKey = migrations.keys.firstOrNull { it.first == version && it.last <= currentVersion }
                     ?: error("cannot look up migration for '$versionKey: $version'")
-                logger.debug { "applying migration $migrationKey" }
+                runBlocking {
+                    logger.debugF { "applying migration $migrationKey" }
+                }
+
                 val migrator = migrations[migrationKey] ?: error("cannot look up migration for '$versionKey: $version'")
                 jsonObject = migrator.migrate(jsonObject, migrationKey.last, versionKey)
             }

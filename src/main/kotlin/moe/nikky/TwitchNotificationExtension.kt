@@ -28,36 +28,36 @@ import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.modify.embed
 import dev.kord.rest.request.KtorRequestException
+import io.klogging.Klogging
+import io.klogging.context.logContext
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
-import mu.KotlinLogging
 import org.koin.core.component.inject
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
-class TwitchNotificationExtension() : Extension() {
+class TwitchNotificationExtension() : Extension(), Klogging {
     override val name = "Twitch Notifications"
-    private val logger = KotlinLogging.logger {}
 
     private val config: ConfigurationService by inject()
-    private var token: TokenHolder? = null
+    private var token: Token? = null
+    private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
 
 //    private lateinit var backgroundJob: Job
@@ -130,8 +130,9 @@ class TwitchNotificationExtension() : Extension() {
                 )
 
                 action {
+                    val logger = this@TwitchNotificationExtension.logger
                     val kord = this@TwitchNotificationExtension.kord
-                    val guild = guild!!.asGuild()
+                    val guild = guild?.asGuild() ?: relayError("no guild in context")
                     val state = config[guild]
 
                     val channelInput = arguments.channel ?: event.interaction.channel
@@ -161,7 +162,7 @@ class TwitchNotificationExtension() : Extension() {
                                             )
                                         )
                                 ).also {
-                                this@TwitchNotificationExtension.logger.info { "twith notif: $it" }
+                                logger.info { "twith notif: $it" }
                             }
                     )
                     config.save()
@@ -186,7 +187,7 @@ class TwitchNotificationExtension() : Extension() {
                 )
 
                 action {
-                    val guild = guild!!.asGuild()
+                    val guild = guild?.asGuild() ?: relayError("no guild in context")
                     val state = config[guild]
 
                     val channelInput = arguments.channel ?: event.interaction.channel
@@ -267,39 +268,42 @@ class TwitchNotificationExtension() : Extension() {
 
         event<GuildCreateEvent> {
             action {
-
-                //TODO: check required bot permissions
-                val state = config.loadConfig(event.guild) ?: run {
-                    logger.error { "failed to load state for '${event.guild.name}'" }
-                    return@action
-                }
-                val validChannels = state.twitchNotifications.map { it.value.channel }.distinct().filter {
-                    val channel = it.asChannel()
-                    val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-                    if (!hasPermissions) {
-                        logger.error { "missing permissions in channel ${channel.name}" }
+                withLogContext(event.guild) { guild ->
+                    val state = config.loadConfig(event.guild) ?: run {
+                        logger.fatalF { "failed to load state for '${event.guild.name}'" }
+                        return@withLogContext
                     }
-                    hasPermissions
-                }
+                    val validChannels = state.twitchNotifications.map { it.value.channel }.distinct().filter {
+                        val channel = it.asChannel()
+                        val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+                        if (!hasPermissions) {
+                            logger.errorF { "missing permissions in channel ${channel.name}" }
+                        }
+                        hasPermissions
+                    }
 
-                kord.launch {
-                    while (true) {
-                        delay(15_000)
-                        checkStreams(event.guild, validChannels)
+                    kord.launch(coroutineContext) {
+//                        withLogContext(event.guild) { guild ->
+                            while (true) {
+                                delay(15_000)
+                                checkStreams(guild, validChannels)
+                            }
+//                        }
                     }
                 }
             }
         }
     }
 
+    @OptIn(ExperimentalTime::class)
     private suspend fun getWebhook(channel: TextChannelBehavior): Webhook? {
         return try {
             webhooksCache[channel.id]?.also {
-                logger.info { "reusing webhook for ${channel.id.asString}" }
+                logger.debugF { "reusing webhook for ${channel.id.asString}" }
             } ?: channel.webhooks.firstOrNull {
                 it.name == WEBHOOK_NAME
             }?.also { webhook ->
-                logger.info { "found webhook for ${channel.id.asString}" }
+                logger.infoF { "found webhook for ${channel.id.asString}" }
                 webhooksCache[channel.id] = webhook
             } ?: channel.createWebhook(name = WEBHOOK_NAME) {
                 @Suppress("BlockingMethodInNonBlockingContext")
@@ -309,11 +313,11 @@ class TwitchNotificationExtension() : Extension() {
                     format = Image.Format.PNG,
                 )
             }.also { webhook ->
-                logger.info { "created webhook $webhook for ${channel.id.asString}" }
+                logger.infoF { "created webhook $webhook for ${channel.id.asString}" }
                 webhooksCache[channel.id] = webhook
             }
         } catch (e: KtorRequestException) {
-            logger.error { e.message }
+            logger.errorF { e.message }
             null
         }
     }
@@ -328,13 +332,13 @@ class TwitchNotificationExtension() : Extension() {
         gameData: TwitchGameData?,
     ) {
         val webhook = getWebhook(twitchNotifSetting.channel) ?: run {
-            logger.error { "failed to get webhook" }
+            logger.errorF { "failed to get webhook" }
             return
         }
 //        logger.debug { "webhook: $webhook" }
 
         suspend fun updateMessageId(messageId: Snowflake) {
-            config[guildBehavior] = config[guildBehavior]!!.let { state ->
+            config[guildBehavior] = config[guildBehavior].let { state ->
                 val key = twitchNotifSetting.twitchUserName + "_" + twitchNotifSetting.channel.id.asString
                 val twitchNotificationState = state.twitchNotifications[key]!!
 
@@ -451,8 +455,9 @@ class TwitchNotificationExtension() : Extension() {
         if (gameData != null) {
             footer {
                 text = gameData.name
-                icon =
-                    gameData.box_art_url.replace("{height}", "16").replace("{width}", "16")
+                icon = gameData.box_art_url
+                    .replace("{height}", "16")
+                    .replace("{width}", "16")
             }
         } else {
             footer {
@@ -487,15 +492,16 @@ class TwitchNotificationExtension() : Extension() {
 
     private suspend fun checkStreams(guild: Guild, validChannels: List<TextChannelBehavior>) = coroutineScope {
         val state = config[guild]
-        if(state.twitchNotifications.isEmpty()) return@coroutineScope
-        logger.info { "checking twitch status for '${guild.name}'" }
+        if (state.twitchNotifications.isEmpty()) return@coroutineScope
+
+        logger.infoF { "checking twitch status for '${guild.name}'" }
 
         //TODO: check required permission in channels
         state.twitchNotifications.map { it.value.channel }.distinct().forEach {
             val channel = it.asChannel()
             val hasPermissions = channel.botHasPermissions(*requiredPermissions)
             if (!hasPermissions) {
-                logger.error { "missing permissions in channel ${channel.name}" }
+                logger.errorF { "missing permissions in channel ${channel.name}" }
             }
         }
 
@@ -506,13 +512,13 @@ class TwitchNotificationExtension() : Extension() {
         val token = httpClient.getToken() ?: return@coroutineScope
         val streamDataMap = httpClient.getStreams(
             token,
-            configStates.flatMap {
+            state.let {
                 filteredNotifications.values.map(TwitchNotificationState::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
         val userDataMap = httpClient.getUsers(
             token,
-            configStates.flatMap {
+            state.let {
                 filteredNotifications.values.map(TwitchNotificationState::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
@@ -525,49 +531,40 @@ class TwitchNotificationExtension() : Extension() {
             userDataMap.values.map { it.id }
         ) ?: return@coroutineScope
         configStates.forEach { state ->
-            launch {
+            launch(
+
+            ) {
                 checkTwitchStreamers(state.guildBehavior,
                     state,
                     token,
                     userDataMap,
                     streamDataMap,
                     gameDataMap,
-                    channelInfoMap)
+                    channelInfoMap
+                )
             }
         }
     }
 
-//    private fun startBackgroundJob(guild: Guild): Job = kord.launch {
-//        while (true) {
-//            delay(15_000)
-//
-////            kord.guilds.onEach { guild ->
-////                launch {
-//            checkStreams(guild, validChannels)
-////                }
-////            }.collect()
-//        }
-//    }
-
     @OptIn(ExperimentalTime::class)
     private suspend fun HttpClient.getToken(): Token? {
         token?.let { token ->
-            if ((Clock.System.now() + Duration.minutes(1)) < token.epiration) {
-                logger.debug { "reusing token" }
-                return token.token
+            if ((Clock.System.now() + Duration.minutes(1)) < tokenExpiration) {
+                logger.traceF { "reusing token" }
+                return token
             }
         }
         if (clientId == null || clientSecret == null) return null
-        logger.debug { "getting new token" }
+        logger.infoF { "getting new token" }
         return post<Token>(urlString = "https://id.twitch.tv/oauth2/token") {
             parameter("client_id", clientId)
             parameter("client_secret", clientSecret)
             parameter("grant_type", "client_credentials")
         }.also {
-            token = TokenHolder(it).also {
-                logger.info { "new token: ${it.token}" }
-                logger.info { "expiration: ${it.epiration}" }
-            }
+            token = it
+            tokenExpiration = Clock.System.now() + Duration.seconds(it.expires_in)
+            logger.infoF { "new token: $token" }
+            logger.infoF { "expiration: $tokenExpiration" }
         }
     }
 
@@ -647,20 +644,20 @@ class TwitchNotificationExtension() : Extension() {
         }.associateBy { it.broadcaster_login.lowercase() }
     }
 
-    private fun <T> JsonObject.parseData(serializer: KSerializer<T>, key: String = "data"): List<T> {
+    private suspend fun <T> JsonObject.parseData(serializer: KSerializer<T>, key: String = "data"): List<T> {
         if (this["error"] != null) {
-            logger.trace { "received: ${json.encodeToString(JsonObject.serializer(), this)}" }
+            logger.errorF { "received: ${json.encodeToString(JsonObject.serializer(), this@parseData)}" }
             error(this["message"]!!.jsonPrimitive.content)
         }
         val array = when (val value = this[key]) {
             is JsonArray -> value
             null -> {
-                logger.error { "key $key is missing from the twitch response" }
+                logger.errorF { "key $key is missing from the twitch response" }
                 return emptyList()
             }
             else -> {
-                logger.error { "twitch data was not a array" }
-                logger.error { json.encodeToString(JsonElement.serializer(), value) }
+                logger.errorF { "twitch data was not a array" }
+                logger.errorF { json.encodeToString(JsonElement.serializer(), value) }
                 return emptyList()
             }
         }
@@ -670,8 +667,8 @@ class TwitchNotificationExtension() : Extension() {
                 array
             )
         } catch (e: SerializationException) {
-            logger.error(e) { "twitch data failed to parse" }
-            logger.error { json.encodeToString(JsonElement.serializer(), array) }
+            logger.errorF(e) { "twitch data failed to parse" }
+            logger.errorF { json.encodeToString(JsonElement.serializer(), array) }
             return emptyList()
         }
     }
