@@ -43,7 +43,7 @@ class ConfigurationExtension : Extension(), Klogging {
                 }
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val kord = this@ConfigurationExtension.kord
                         val logger = this@ConfigurationExtension.logger
                         logger.info { "reloading configurations for ${guild.name}" }
@@ -65,7 +65,7 @@ class ConfigurationExtension : Extension(), Klogging {
                 }
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val state = config[guild]
 
                         config[guild] = state.copy(
@@ -88,7 +88,7 @@ class ConfigurationExtension : Extension(), Klogging {
                 }
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val state = config[guild]
 
                         config[guild] = state.copy(

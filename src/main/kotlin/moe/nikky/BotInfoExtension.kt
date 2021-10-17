@@ -61,7 +61,7 @@ class BotInfoExtension : Extension(), Klogging {
                 }
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val state = config[guild]
 
                         respond {
@@ -92,7 +92,7 @@ class BotInfoExtension : Extension(), Klogging {
                 description = "get invite url"
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         this@BotInfoExtension.logger.infoF { "executed invite" }
                         respond {
                             content = inviteUrl

@@ -116,6 +116,11 @@ suspend fun main() {
 //        intents {
 //            +Intent.GuildWebhooks
 //        }
+
+//        chatCommands {
+//            defaultPrefix = "!"
+//            enabled = true
+//        }
         i18n {
             defaultLocale = SupportedLocales.ENGLISH
         }
@@ -131,12 +136,19 @@ suspend fun main() {
             if(TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
+//            help {
+//                enableBundledExtension = true
+//                deleteInvocationOnPaginatorTimeout = true
+//                deletePaginatorOnTimeout = true
+//                pingInReply = true
+//            }
         }
         presence {
             status = PresenceStatus.Idle
             afk = true
         }
         hooks {
+            kordShutdownHook = true
             afterKoinSetup {
                 registerKoinModules()
             }

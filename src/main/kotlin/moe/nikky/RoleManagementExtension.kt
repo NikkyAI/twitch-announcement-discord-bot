@@ -93,7 +93,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 )
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val kord = this@RoleManagementExtension.kord
                         val logger = this@RoleManagementExtension.logger
                         val state = config[guild]
@@ -162,7 +162,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 )
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         val kord = this@RoleManagementExtension.kord
                         val state = config[guild]
                         val channel = event.interaction.channel
@@ -229,7 +229,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 }
 
                 action {
-                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    withLogContext(event, guild) { guild ->
                         respond {
                             content = "OK"
                         }

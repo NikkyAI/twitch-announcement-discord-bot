@@ -18,7 +18,7 @@ class DiceExtension() : Extension(), Klogging {
             description = "rolls dice"
 
             action {
-                withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                withLogContext(event, guild) { guild ->
                     val diceNotation: DiceNotation = arguments.notation.diceNotation()
 
                     val result = diceNotation.roll()

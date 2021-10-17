@@ -133,40 +133,41 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 action {
                     val logger = this@TwitchNotificationExtension.logger
                     val kord = this@TwitchNotificationExtension.kord
-                    val guild = guild?.asGuild() ?: relayError("no guild in context")
-                    val state = config[guild]
+                    withLogContext(event, guild) { guild ->
+                        val state = config[guild]
 
-                    val channelInput = arguments.channel ?: event.interaction.channel
-                    val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-                        ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+                        val channelInput = arguments.channel ?: event.interaction.channel
+                        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
+                            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
 
-                    val user = try {
-                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
-                        val userData = httpClient.getUsers(token, listOf(arguments.twitchUserName))
-                            ?: relayError("cannot fetch user data for <https://twitch.tv/${arguments.twitchUserName}>")
-                        userData[arguments.twitchUserName.lowercase()]
-                            ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
-                    } catch (e: IllegalStateException) {
-                        relayError(e.message
-                            ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
-                    }
+                        val user = try {
+                            val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                            val userData = httpClient.getUsers(token, listOf(arguments.twitchUserName))
+                                ?: relayError("cannot fetch user data for <https://twitch.tv/${arguments.twitchUserName}>")
+                            userData[arguments.twitchUserName.lowercase()]
+                                ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
+                        } catch (e: IllegalStateException) {
+                            relayError(e.message
+                                ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
+                        }
 
-                    config[guild] = state.copy(
-                        twitchNotifications =
-                        state.twitchNotifications + Pair(
-                            first = "${user.login}_${channel.id.asString}",
-                            second = TwitchNotificationState(
-                                channel = channel,
-                                twitchUserName = user.login,
-                                role = arguments.role,
+                        config[guild] = state.copy(
+                            twitchNotifications =
+                            state.twitchNotifications + Pair(
+                                first = "${user.login}_${channel.id.asString}",
+                                second = TwitchNotificationState(
+                                    channel = channel,
+                                    twitchUserName = user.login,
+                                    role = arguments.role,
+                                )
                             )
                         )
-                    )
-                    config.save()
+                        config.save()
 
-                    respond {
-                        content =
-                            "added  ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+                        respond {
+                            content =
+                                "added  ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+                        }
                     }
                 }
             }
@@ -184,28 +185,29 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 )
 
                 action {
-                    val guild = guild?.asGuild() ?: relayError("no guild in context")
-                    val state = config[guild]
+                    withLogContext(event, guild) { guild ->
+                        val state = config[guild]
 
-                    val channelInput = arguments.channel ?: event.interaction.channel
-                    val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-                        ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+                        val channelInput = arguments.channel ?: event.interaction.channel
+                        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
+                            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
 
-                    val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
-                    val toRemove = state.twitchNotifications[toRemoveKey]
+                        val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
+                        val toRemove = state.twitchNotifications[toRemoveKey]
 
-                    config[guild] = state.copy(
-                        twitchNotifications = state.twitchNotifications.filterKeys { it != toRemoveKey }
-                    )
-                    config.save()
+                        config[guild] = state.copy(
+                            twitchNotifications = state.twitchNotifications.filterKeys { it != toRemoveKey }
+                        )
+                        config.save()
 
 //                    toRemove?.message?.delete()
-                    toRemove?.message?.let {
-                        channel.deleteMessage(it)
-                    }
+                        toRemove?.message?.let {
+                            channel.deleteMessage(it)
+                        }
 
-                    respond {
-                        content = "removed ${arguments.twitchUserName} from ${channel.mention}"
+                        respond {
+                            content = "removed ${arguments.twitchUserName} from ${channel.mention}"
+                        }
                     }
                 }
 
@@ -220,27 +222,28 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
 
                 action {
-                    val guild = guild!!.asGuild()
-                    val state = config[guild]
+                    withLogContext(event, guild) { guild ->
+                        val state = config[guild]
 
-                    val messages = state.twitchNotifications.map { (key, entry) ->
-                        val message = entry.message?.let { channel.getMessageOrNull(it) }
-                        """
+                        val messages = state.twitchNotifications.map { (key, entry) ->
+                            val message = entry.message?.let { channel.getMessageOrNull(it) }
+                            """
                             <https://twitch.tv/${entry.twitchUserName}>
                             ${entry.role.mention}
                             ${entry.channel.mention}
                             ${message?.getJumpUrl()}
                         """.trimIndent()
-                    }
+                        }
 
-                    val response = if (messages.isNotEmpty()) {
-                        "registered twitch notifications: \n\n" + messages.joinToString("\n\n")
-                    } else {
-                        "no twitch notifications registered, get started with /twitch add "
-                    }
+                        val response = if (messages.isNotEmpty()) {
+                            "registered twitch notifications: \n\n" + messages.joinToString("\n\n")
+                        } else {
+                            "no twitch notifications registered, get started with /twitch add "
+                        }
 
-                    respond {
-                        content = response
+                        respond {
+                            content = response
+                        }
                     }
                 }
 

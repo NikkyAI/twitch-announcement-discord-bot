@@ -82,10 +82,10 @@ fun logFile(file: File, append: Boolean = false): SendString {
 private val logger = logger("moe.nikky.KloggingExt")
 suspend fun <E : Event, T> Extension.withLogContext(
     event: E,
-    guildBehavior: GuildBehavior,
+    guildBehavior: GuildBehavior?,
     block: suspend CoroutineScope.(Guild) -> T,
 ): T {
-    val guild = guildBehavior.asGuild()
+    val guild = guildBehavior?.asGuild() ?: relayError("cannot load guild")
     val items = mutableListOf<Pair<String, Any?>>()
     if(event is InteractionCreateEvent) {
         items += "channel" to (event.interaction.channel.asChannel() as? GuildChannel)?.name
