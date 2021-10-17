@@ -22,7 +22,7 @@ String fullPattern = w("%-55",
 
 String consolePattern = ""
 if (System.getenv("DOCKER_LOGGING") == "true") {
-    consolePattern = '[%thread] ' + fileRef + ' %-5level - %msg%n'
+    consolePattern = fileRef + ' ' +  w('%boldWhite', '%-5level') +' - %msg%n'
 } else {
 //    consolePattern = "%-55(%boldBlue(%d{dd-MM-yyyy'T'HH:mm:ssZ}) %highlight([%thread] %-20(.\\(%F:%L\\)))) %-5level - %msg%n"
     consolePattern = w('%cyan', '%d{dd-MM-yyyy\'T\'HH:mm:ssZ}') + ' ' + w("%-60", " [%thread] $fileRef" as String)+ ' ' + w('%highlight', '%-5level') + ' - %msg%n'

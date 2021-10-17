@@ -42,7 +42,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
 import mu.KotlinLogging
@@ -650,12 +652,28 @@ class TwitchNotificationExtension() : Extension() {
             logger.trace { "received: ${json.encodeToString(JsonObject.serializer(), this)}" }
             error(this["message"]!!.jsonPrimitive.content)
         }
-        val value = this[key] as JsonElement
-        if(value !is JsonArray) return emptyList()
-        return json.decodeFromJsonElement(
-            ListSerializer(serializer),
-            value
-        )
+        val array = when (val value = this[key]) {
+            is JsonArray -> value
+            null -> {
+                logger.error { "key $key is missing from the twitch response" }
+                return emptyList()
+            }
+            else -> {
+                logger.error { "twitch data was not a array" }
+                logger.error { json.encodeToString(JsonElement.serializer(), value) }
+                return emptyList()
+            }
+        }
+        return try {
+            json.decodeFromJsonElement(
+                ListSerializer(serializer),
+                array
+            )
+        } catch (e: SerializationException) {
+            logger.error(e) { "twitch data failed to parse" }
+            logger.error { json.encodeToString(JsonElement.serializer(), array) }
+            return emptyList()
+        }
     }
 
 }
