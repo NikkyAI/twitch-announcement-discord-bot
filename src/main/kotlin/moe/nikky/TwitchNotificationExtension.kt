@@ -13,6 +13,7 @@ import com.kotlindiscord.kord.extensions.utils.botHasPermissions
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import dev.kord.common.entity.Permission
+import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.channel.TextChannelBehavior
@@ -151,19 +152,15 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     }
 
                     config[guild] = state.copy(
-                        twitchNotifications = (
-                                state.twitchNotifications +
-                                        Pair(
-                                            "${user.login}_${channel.id.asString}",
-                                            TwitchNotificationState(
-                                                channel = channel,
-                                                twitchUserName = user.login,
-                                                role = arguments.role,
-                                            )
-                                        )
-                                ).also {
-                                logger.info { "twith notif: $it" }
-                            }
+                        twitchNotifications =
+                        state.twitchNotifications + Pair(
+                            first = "${user.login}_${channel.id.asString}",
+                            second = TwitchNotificationState(
+                                channel = channel,
+                                twitchUserName = user.login,
+                                role = arguments.role,
+                            )
+                        )
                     )
                     config.save()
 
@@ -268,7 +265,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         event<GuildCreateEvent> {
             action {
-                withLogContext(event.guild) { guild ->
+                withLogContext(event, event.guild) { guild ->
                     val state = config.loadConfig(event.guild) ?: run {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext
@@ -284,10 +281,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                     kord.launch(coroutineContext) {
 //                        withLogContext(event.guild) { guild ->
-                            while (true) {
-                                delay(15_000)
-                                checkStreams(guild, validChannels)
-                            }
+                        while (true) {
+                            delay(15_000)
+                            checkStreams(guild, validChannels)
+                        }
 //                        }
                     }
                 }
@@ -299,11 +296,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private suspend fun getWebhook(channel: TextChannelBehavior): Webhook? {
         return try {
             webhooksCache[channel.id]?.also {
-                logger.debugF { "reusing webhook for ${channel.id.asString}" }
+                logger.traceF { "reusing webhook" }
             } ?: channel.webhooks.firstOrNull {
                 it.name == WEBHOOK_NAME
             }?.also { webhook ->
-                logger.infoF { "found webhook for ${channel.id.asString}" }
+                logger.infoF { "found webhook" }
                 webhooksCache[channel.id] = webhook
             } ?: channel.createWebhook(name = WEBHOOK_NAME) {
                 @Suppress("BlockingMethodInNonBlockingContext")
@@ -313,7 +310,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     format = Image.Format.PNG,
                 )
             }.also { webhook ->
-                logger.infoF { "created webhook $webhook for ${channel.id.asString}" }
+                logger.infoF { "created webhook $webhook" }
                 webhooksCache[channel.id] = webhook
             }
         } catch (e: KtorRequestException) {
@@ -330,11 +327,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         channelInfo: TwitchChannelInfo,
         streamData: StreamData?,
         gameData: TwitchGameData?,
+        webhook: Webhook,
     ) {
-        val webhook = getWebhook(twitchNotifSetting.channel) ?: run {
-            logger.errorF { "failed to get webhook" }
-            return
-        }
+//        val webhook = getWebhook(twitchNotifSetting.channel) ?: run {
+//            logger.errorF { "failed to get webhook" }
+//            return
+//        }
 //        logger.debug { "webhook: $webhook" }
 
         suspend fun updateMessageId(messageId: Snowflake) {
@@ -474,19 +472,24 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         streamDataMap: Map<String, StreamData>,
         gameDataMap: Map<String, TwitchGameData>,
         channelInfoMap: Map<String, TwitchChannelInfo>,
+        webhooks: Map<Snowflake, Webhook>,
     ) {
         state.twitchNotifications.forEach { (_, twitchNotifSetting) ->
             val userData = userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@forEach
             val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@forEach
+            val webhook = webhooks[twitchNotifSetting.channel.id] ?: return@forEach
             val streamData = streamDataMap[userData.login.lowercase()]
             val gameData = gameDataMap[streamData?.game_name?.lowercase()]
-            updateTwitchNotificationMessage(guildBehavior,
+            updateTwitchNotificationMessage(
+                guildBehavior,
                 twitchNotifSetting,
                 token,
                 userData,
                 channelInfo,
                 streamData,
-                gameData)
+                gameData,
+                webhook
+            )
         }
     }
 
@@ -494,7 +497,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         val state = config[guild]
         if (state.twitchNotifications.isEmpty()) return@coroutineScope
 
-        logger.infoF { "checking twitch status for '${guild.name}'" }
+        logger.traceF { "checking twitch status" }
 
         //TODO: check required permission in channels
         state.twitchNotifications.map { it.value.channel }.distinct().forEach {
@@ -506,6 +509,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 
         val filteredNotifications = state.twitchNotifications.filter { it.value.channel in validChannels }
+
+        val webhooks = validChannels.mapNotNull { channel ->
+            withContext(logContext("channel" to channel.asChannel().name)) {
+                getWebhook(channel)
+            }
+        }.associateBy { it.channel.id }
 
         val configStates = listOf(state)
 
@@ -530,6 +539,20 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             token,
             userDataMap.values.map { it.id }
         ) ?: return@coroutineScope
+
+        if (streamDataMap.isNotEmpty()) {
+            val userName = streamDataMap.values.random().user_name
+            kord.editPresence {
+                status = PresenceStatus.Online
+                watching(userName)
+            }
+        } else {
+            kord.editPresence {
+                status = PresenceStatus.Idle
+                afk = true
+            }
+        }
+
         configStates.forEach { state ->
             launch(
 
@@ -540,7 +563,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     userDataMap,
                     streamDataMap,
                     gameDataMap,
-                    channelInfoMap
+                    channelInfoMap,
+                    webhooks
                 )
             }
         }

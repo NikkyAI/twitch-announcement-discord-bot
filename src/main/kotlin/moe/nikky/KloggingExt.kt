@@ -1,14 +1,21 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.events.EventContext
+import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.time.TimestampType
 import com.kotlindiscord.kord.extensions.time.toDiscord
+import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
+import dev.kord.core.entity.channel.GuildChannel
+import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.Event
+import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.Klogger
 import io.klogging.Level
 import io.klogging.context.logContext
 import io.klogging.events.LogEvent
+import io.klogging.logger
 import io.klogging.rendering.*
 import io.klogging.sending.SendString
 import io.ktor.util.cio.*
@@ -72,17 +79,26 @@ fun logFile(file: File, append: Boolean = false): SendString {
 //    }
 //}
 
-suspend fun <E : Event, T> EventContext<E>.withLogContext(
-    guild: Guild,
+private val logger = logger("moe.nikky.KloggingExt")
+suspend fun <E : Event, T> Extension.withLogContext(
+    event: E,
+    guildBehavior: GuildBehavior,
     block: suspend CoroutineScope.(Guild) -> T,
 ): T {
+    val guild = guildBehavior.asGuild()
+    val items = mutableListOf<Pair<String, Any?>>()
+    if(event is InteractionCreateEvent) {
+        items += "channel" to (event.interaction.channel.asChannel() as? GuildChannel)?.name
+    }
+    items += listOf(
+        "guild" to "'${guild.name}'",
+        "event" to event::class.simpleName,
+        "extension" to name,
+    )
     return withContext(
-        logContext(
-            "guild" to "'${guild.name}'",
-            "guildId" to guild.id.asString,
-            "event" to event::class.simpleName,
-        )
+        logContext(*items.toTypedArray())
     ) {
+        logger.infoF { "triggered event ${event::class.simpleName}" }
         block(guild)
     }
 }

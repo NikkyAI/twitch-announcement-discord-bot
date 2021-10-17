@@ -16,7 +16,7 @@ public suspend fun <T: Event> CheckContext<T>.hasRoleNullable(builder: suspend (
         return
     }
 
-    val logger = KotlinLogging.logger("com.kotlindiscord.kord.extensions.checks.hasRole")
+    val logger = KotlinLogging.logger("moe.nikky.checks.hasRoleNullable")
     val member = com.kotlindiscord.kord.extensions.checks.memberFor(event)
 
     if (member == null) {

@@ -5,11 +5,13 @@ import com.kotlindiscord.kord.extensions.i18n.SupportedLocales
 import com.kotlindiscord.kord.extensions.utils.env
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
+import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
 import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
 import io.klogging.config.DEFAULT_CONSOLE
+import io.klogging.config.LevelRange
 import io.klogging.config.loggingConfiguration
 import io.klogging.config.seq
 import io.klogging.logger
@@ -28,7 +30,7 @@ import java.util.*
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 
-private val logger = logger("Main")
+private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
 
 @Deprecated("remove")
@@ -48,12 +50,13 @@ suspend fun main() {
 
 
     loggingConfiguration {
-        kloggingMinLevel(Level.DEBUG)
-        if(dockerLogging) {
+        val rootLogLevel = if(dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
+            Level.INFO
         } else {
-//            sink("stdout", CUSTOM_RENDERER, STDOUT)
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
+            Level.DEBUG
+            Level.INFO
         }
         sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
         val timestamp = SimpleDateFormat("yyyy-dd-MM-HH-mm-ss").format(Date())
@@ -62,41 +65,60 @@ suspend fun main() {
         if(seqServer != null) {
             sink("seq", seq(seqServer))
         }
+        fun LevelRange.applySinks() {
+            toSink("stdout")
+            if(seqServer != null) {
+                toSink("seq")
+            }
+            toSink("file_latest")
+            toSink("file")
+        }
         logging {
+            fromLoggerBase("moe.nikky")
             fromMinLevel(Level.DEBUG) {
-                toSink("stdout")
-                if(seqServer != null) {
-                    toSink("seq")
-                }
-                toSink("file_latest")
-                toSink("file")
+                applySinks()
+            }
+        }
+        logging {
+            fromLoggerBase("dev.kord.rest")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
+        }
+        logging {
+            fromLoggerBase("dev.kord")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
+        }
+        logging {
+            fromLoggerBase("com.kotlindiscord.kord.extensions")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
+        }
+        logging {
+            fromMinLevel(rootLogLevel) {
+                applySinks()
             }
         }
     }
     val token = env("BOT_TOKEN")
 
-    val withStacktrace = measureTime {
-        logger.infoF { "defaultGuidId: $TEST_GUILD_ID" }
+    if(!dockerLogging) {
+        logger.warnF { "WARN" }
+        logger.errorF { "ERROR" }
+        logger.fatalF { "FATAL" }
     }
-    val normal = measureTime {
-        logger.info { "defaultGuidId: $TEST_GUILD_ID" }
-    }
-    val difference = withStacktrace-normal
-    logger.debug("normal: {normal} withStacktrace: {withStacktrace}, difference: {difference}", normal, withStacktrace , difference)
-
+    logger.infoF { "defaultGuidId: $TEST_GUILD_ID" }
 
     val bot = ExtensibleBot(token) {
-        intents {
-            +Intent.GuildIntegrations
-            +Intent.GuildWebhooks
-        }
+//        intents {
+//            +Intent.GuildWebhooks
+//        }
         i18n {
             defaultLocale = SupportedLocales.ENGLISH
         }
-//        chatCommands {
-//            enabled = true
-//            defaultPrefix = "!"
-//        }
         applicationCommands {
             defaultGuild = TEST_GUILD_ID
         }
@@ -109,6 +131,10 @@ suspend fun main() {
             if(TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
+        }
+        presence {
+            status = PresenceStatus.Idle
+            afk = true
         }
         hooks {
             afterKoinSetup {

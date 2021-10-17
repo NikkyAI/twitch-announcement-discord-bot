@@ -11,7 +11,7 @@ import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.logger
 import moe.nikky.ConfigurationService
 
-private val logger = logger("BotChecks")
+private val logger = logger("moe.nikky.BotChecks")
 
 suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: ConfigurationService) {
     val guild = guildFor(event)

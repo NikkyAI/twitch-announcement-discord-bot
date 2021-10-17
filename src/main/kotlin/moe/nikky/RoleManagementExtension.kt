@@ -93,56 +93,58 @@ class RoleManagementExtension : Extension(), Klogging {
                 )
 
                 action {
-                    val kord = this@RoleManagementExtension.kord
-                    val guild = guild ?: relayError("error looking up guild info")
-                    val state = config[guild]
-                    val channel = event.interaction.channel.asChannel() as TextChannel
+                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                        val kord = this@RoleManagementExtension.kord
+                        val logger = this@RoleManagementExtension.logger
+                        val state = config[guild]
+                        val channel = event.interaction.channel.asChannel() as TextChannel
 
-                    val oldRolePickerMessageState = state.roleChooser[arguments.section]
+                        val oldRolePickerMessageState = state.roleChooser[arguments.section]
 
-                    this@RoleManagementExtension.logger.info { "reaction: '${arguments.reaction}'" }
-                    val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
-                        ?.let { ReactionEmoji.from(it) }
-                        ?: ReactionEmoji.Unicode(arguments.reaction)
+                        logger.info { "reaction: '${arguments.reaction}'" }
+                        val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
+                            ?.let { ReactionEmoji.from(it) }
+                            ?: ReactionEmoji.Unicode(arguments.reaction)
 
-                    this@RoleManagementExtension.logger.info { "reaction emoji: $reactionEmoji" }
+                        logger.info { "reaction emoji: $reactionEmoji" }
 
-                    val message = oldRolePickerMessageState?.getMessageOrRelayError()
-                        ?: channel.createMessage("placeholder for section ${arguments.section}")
+                        val message = oldRolePickerMessageState?.getMessageOrRelayError()
+                            ?: channel.createMessage("placeholder for section ${arguments.section}")
 
-                    val newRolePickerMessageState = RolePickerMessageState(
-                        channel = channel as GuildMessageChannelBehavior,
-                        messageId = message.id,
-                        roleMapping = (oldRolePickerMessageState?.roleMapping
-                            ?: emptyMap()) + (reactionEmoji to arguments.role),
-                    )
-                    config[guild] = state.copy(
-                        roleChooser = state.roleChooser + Pair(
-                            arguments.section,
-                            newRolePickerMessageState,
+                        val newRolePickerMessageState = RolePickerMessageState(
+                            channel = channel as GuildMessageChannelBehavior,
+                            messageId = message.id,
+                            roleMapping = (oldRolePickerMessageState?.roleMapping
+                                ?: emptyMap()) + (reactionEmoji to arguments.role),
                         )
-                    )
-                    config.save()
+                        config[guild] = state.copy(
+                            roleChooser = state.roleChooser + Pair(
+                                arguments.section,
+                                newRolePickerMessageState,
+                            )
+                        )
+                        config.save()
 
-                    message.edit {
-                        content = buildMessage(
+                        message.edit {
+                            content = buildMessage(
+                                arguments.section,
+                                newRolePickerMessageState
+                            )
+                        }
+                        newRolePickerMessageState.roleMapping.forEach { (reactionEmoji, _) ->
+                            message.addReaction(reactionEmoji)
+                        }
+
+                        oldRolePickerMessageState?.liveMessageJob?.cancel()
+                        startOnReaction(
+                            message,
                             arguments.section,
                             newRolePickerMessageState
                         )
-                    }
-                    newRolePickerMessageState.roleMapping.forEach { (reactionEmoji, _) ->
-                        message.addReaction(reactionEmoji)
-                    }
 
-                    oldRolePickerMessageState?.liveMessageJob?.cancel()
-                    startOnReaction(
-                        message,
-                        arguments.section,
-                        newRolePickerMessageState
-                    )
-
-                    respond {
-                        content = "added new role"
+                        respond {
+                            content = "added new role"
+                        }
                     }
                 }
             }
@@ -160,55 +162,56 @@ class RoleManagementExtension : Extension(), Klogging {
                 )
 
                 action {
-                    val kord = this@RoleManagementExtension.kord
-                    val guild = guild ?: relayError("error looking up guild info")
-                    val state = config[guild]
-                    val channel = event.interaction.channel
+                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                        val kord = this@RoleManagementExtension.kord
+                        val state = config[guild]
+                        val channel = event.interaction.channel
 
-                    val oldRolePickerMessageState = state.roleChooser[arguments.section]
-                        ?: relayError("no roleselection section ${arguments.section}")
+                        val oldRolePickerMessageState = state.roleChooser[arguments.section]
+                            ?: relayError("no roleselection section ${arguments.section}")
 
-                    val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
-                        ?.let { ReactionEmoji.from(it) }
-                        ?: ReactionEmoji.Unicode(arguments.reaction)
+                        val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
+                            ?.let { ReactionEmoji.from(it) }
+                            ?: ReactionEmoji.Unicode(arguments.reaction)
 
-                    val removedRole = oldRolePickerMessageState.roleMapping[reactionEmoji] ?: relayError(
-                        "no role exists for ${reactionEmoji.mention}"
-                    )
-
-                    val message = oldRolePickerMessageState.getMessageOrRelayError()
-                        ?: channel.createMessage("placeholder for section ${arguments.section}")
-
-                    val newRolePickerMessageState = oldRolePickerMessageState.copy(
-                        roleMapping = oldRolePickerMessageState.roleMapping - reactionEmoji,
-                    )
-                    message.edit {
-                        content = buildMessage(
-                            arguments.section,
-                            newRolePickerMessageState
+                        val removedRole = oldRolePickerMessageState.roleMapping[reactionEmoji] ?: relayError(
+                            "no role exists for ${reactionEmoji.mention}"
                         )
-                    }
-                    message.getReactors(reactionEmoji)
-                        .filter { user ->
-                            user.id != kord.selfId
-                        }.map { user ->
-                            user.asMember(guild.id)
-                        }.filter { member ->
-                            removedRole.id in member.roleIds
-                        }.collect { member ->
-                            member.removeRole(removedRole.id)
+
+                        val message = oldRolePickerMessageState.getMessageOrRelayError()
+                            ?: channel.createMessage("placeholder for section ${arguments.section}")
+
+                        val newRolePickerMessageState = oldRolePickerMessageState.copy(
+                            roleMapping = oldRolePickerMessageState.roleMapping - reactionEmoji,
+                        )
+                        message.edit {
+                            content = buildMessage(
+                                arguments.section,
+                                newRolePickerMessageState
+                            )
                         }
-                    message.asMessage().deleteReaction(reactionEmoji)
-                    config[guild] = state.copy(
-                        roleChooser = state.roleChooser + Pair(
-                            arguments.section,
-                            newRolePickerMessageState,
+                        message.getReactors(reactionEmoji)
+                            .filter { user ->
+                                user.id != kord.selfId
+                            }.map { user ->
+                                user.asMember(guild.id)
+                            }.filter { member ->
+                                removedRole.id in member.roleIds
+                            }.collect { member ->
+                                member.removeRole(removedRole.id)
+                            }
+                        message.asMessage().deleteReaction(reactionEmoji)
+                        config[guild] = state.copy(
+                            roleChooser = state.roleChooser + Pair(
+                                arguments.section,
+                                newRolePickerMessageState,
+                            )
                         )
-                    )
-                    config.save()
+                        config.save()
 
-                    respond {
-                        content = "removed role"
+                        respond {
+                            content = "removed role"
+                        }
                     }
                 }
             }
@@ -226,8 +229,10 @@ class RoleManagementExtension : Extension(), Klogging {
                 }
 
                 action {
-                    respond {
-                        content = "OK"
+                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                        respond {
+                            content = "OK"
+                        }
                     }
                 }
             }
@@ -235,7 +240,7 @@ class RoleManagementExtension : Extension(), Klogging {
 
         event<GuildCreateEvent> {
             action {
-                withLogContext(event.guild) { guild ->
+                withLogContext(event, event.guild) { guild ->
                     val state = config.loadConfig(event.guild) ?: run {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext

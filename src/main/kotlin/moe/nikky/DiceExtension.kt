@@ -14,26 +14,29 @@ class DiceExtension() : Extension(), Klogging {
     override val name: String = "Reality switching"
     override suspend fun setup() {
         publicSlashCommand(::DiceArgs) {
-            name = commandPrefix+"dice"
+            name = "dice"
             description = "rolls dice"
 
-
             action {
-                val diceNotation: DiceNotation = arguments.notation.diceNotation()
+                withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                    val diceNotation: DiceNotation = arguments.notation.diceNotation()
 
-                val result = diceNotation.roll()
+                    val result = diceNotation.roll()
 
 
-                val dices = result.results.joinToString("\n") {
-                    """${it.dice.displayNotation.padEnd(6)} -> Σ ${it.result.sum()} :: Ø ${it.result.average().format(2)} :: ||${it.result.joinToString()}||"""
-                }
-                respond {
-                    content = """
+                    val dices = result.results.joinToString("\n") {
+                        """${it.dice.displayNotation.padEnd(6)} -> Σ ${it.result.sum()} :: Ø ${
+                            it.result.average().format(2)
+                        } :: ||${it.result.joinToString()}||"""
+                    }
+                    respond {
+                        content = """
                         |notation: ${diceNotation.getDisplayString()}
                         |total:: Σ ${result.total}
                         |dice:: 
                         |$dices
                     """.trimMargin()
+                    }
                 }
             }
         }

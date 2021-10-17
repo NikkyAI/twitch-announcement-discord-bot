@@ -43,6 +43,7 @@ data class TwitchNotificationState(
     val role: Role,
     val message: Snowflake? = null,
 ): Klogging {
+    val twitchUrl: String = "https://twitch.tv/$twitchUserName"
     fun asSerialized(): TwitchNotificationConfig {
         return TwitchNotificationConfig(
             twitchUserName = twitchUserName,

@@ -105,7 +105,7 @@ class TestExtension : Extension(), Klogging {
         }
         event<GuildCreateEvent> {
             action {
-                withLogContext(event.guild) { guild ->
+                withLogContext(event, event.guild) { guild ->
                     if (event.guild.id != TEST_GUILD_ID) return@withLogContext
                     logger.infoF { "ready event on ${guild.name}" }
                 }

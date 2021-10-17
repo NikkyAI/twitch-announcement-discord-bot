@@ -28,12 +28,7 @@ class BotInfoExtension : Extension(), Klogging {
     private val inviteUrl: String = runBlocking {
         val permission = Permissions(
             Permission.ViewChannel,
-//            Permission.ManageChannels,
             Permission.ManageRoles,
-//            Permission.ManageWebhooks,
-//            Permission.ManageMessages,
-//            Permission.ReadMessageHistory,
-//            Permission.AddReactions,
         )
         val scopes = listOf(
             "bot",
@@ -44,7 +39,7 @@ class BotInfoExtension : Extension(), Klogging {
             parameters.append("permissions", permission.code.value)
             parameters.append("scope", scopes.joinToString(" "))
         }.build().toString().also { inviteUrl ->
-            logger.info { "invite: $inviteUrl" }
+            logger.infoF { "invite: $inviteUrl" }
         }
     }
 
@@ -66,14 +61,7 @@ class BotInfoExtension : Extension(), Klogging {
                 }
 
                 action {
-                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
-                    withContext(
-                        logContext(
-                            "guild" to "'${guild.name}'",
-                            "guildId" to guild.id.asString,
-                            "event" to event::class.simpleName,
-                        )
-                    ) {
+                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
                         val state = config[guild]
 
                         respond {
@@ -84,11 +72,16 @@ class BotInfoExtension : Extension(), Klogging {
                                     }
                                 }
 
+                            val twitch = state.twitchNotifications.entries.joinToString("\n") {(_, twitchNotif) ->
+                                "<${twitchNotif.twitchUrl}> ${twitchNotif.role.mention} in ${twitchNotif.channel.mention}"
+                            }
                             content = """
-                        |guild: ${guild.name}
-                        |editable roles: 
-                        ${choosableRoles.indent("|  ")}
-                    """.trimMargin()
+                                |adminRole: ${state.adminRole?.mention}
+                                |role pickers: 
+                                ${choosableRoles.indent("|  ")}
+                                |twitch notifications:
+                                ${twitch.indent("|  ")}
+                            """.trimMargin()
                         }
                     }
                 }
@@ -99,14 +92,8 @@ class BotInfoExtension : Extension(), Klogging {
                 description = "get invite url"
 
                 action {
-                    val guild = guild?.asGuild() ?: relayError("cannot load guild")
-                    withContext(
-                        logContext(
-                            "guild" to "'${guild.name}'",
-                            "guildId" to guild.id.asString,
-                            "event" to event::class.simpleName,
-                        )
-                    ) {
+                    withLogContext(event, guild?.asGuild() ?: relayError("cannot load guild")) { guild ->
+                        this@BotInfoExtension.logger.infoF { "executed invite" }
                         respond {
                             content = inviteUrl
                         }
@@ -128,19 +115,19 @@ class BotInfoExtension : Extension(), Klogging {
             }
         }
 
-        event<GuildCreateEvent> {
-            action {
-                val guild = event.guild
-                withContext(
-                    logContext(
-                        "guild" to "'${guild.name}'",
-                        "guildId" to guild.id.asString,
-                        "event" to event::class.simpleName,
-                    )
-                ) {
-                    logger.debugF { "guild create event" }
-                }
-            }
-        }
+//        event<GuildCreateEvent> {
+//            action {
+//                val guild = event.guild
+//                withContext(
+//                    logContext(
+//                        "guild" to "'${guild.name}'",
+//                        "guildId" to guild.id.asString,
+//                        "event" to event::class.simpleName,
+//                    )
+//                ) {
+//
+//                }
+//            }
+//        }
     }
 }
