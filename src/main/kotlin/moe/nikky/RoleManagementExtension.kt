@@ -287,7 +287,7 @@ class RoleManagementExtension : Extension(), Klogging {
     private fun buildMessage(
         section: String,
         newRolePickerMessageState: RolePickerMessageState,
-    ) = "**${section}**: \n\n" + newRolePickerMessageState.roleMapping.entries.joinToString(
+    ) = "**${section}**: \n" + newRolePickerMessageState.roleMapping.entries.joinToString(
         "\n") { (reactionEmoji, role) ->
         "${reactionEmoji.mention} `${role.name}`"
     }
