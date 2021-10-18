@@ -25,18 +25,14 @@ import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
 import io.klogging.Klogging
-import io.klogging.context.logContext
-import io.klogging.logger
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 import moe.nikky.checks.hasBotControl
-import mu.KotlinLogging
 import org.koin.core.component.inject
-import java.util.*
 import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
@@ -72,7 +68,7 @@ class RoleManagementExtension : Extension(), Klogging {
             requireBotPermissions(Permission.ManageRoles)
 
             ephemeralSubCommand({
-                object: Arguments() {
+                object : Arguments() {
                     val section by string("section", "Section Title")
                     val reaction by string("emoji", "Reaction Emoji")
                     val role by role("role", "Role")
@@ -254,7 +250,11 @@ class RoleManagementExtension : Extension(), Klogging {
 
                         if (missingPermissions.isNotEmpty()) {
                             val locale = guild.preferredLocale
-                            logger.errorF { "missing permissions in ${guild.name} #${channel.name} ${missingPermissions.joinToString(", ") {it.translate(locale)}}" }
+                            logger.errorF {
+                                "missing permissions in ${guild.name} #${channel.name} ${
+                                    missingPermissions.joinToString(", ") { it.translate(locale) }
+                                }"
+                            }
                         }
                     }
 
@@ -268,6 +268,16 @@ class RoleManagementExtension : Extension(), Klogging {
                                     section,
                                     rolePickerMessageState
                                 )
+                            }
+                            rolePickerMessageState.roleMapping.forEach { (emoji, role) ->
+                                val reactors = message.getReactors(emoji)
+                                reactors.map { it.asMemberOrNull(guild.id) }
+                                    .filterNotNull()
+                                    .filter { member ->
+                                        role.id !in member.roleIds
+                                    }.collect { member ->
+                                        member.addRole(role.id)
+                                    }
                             }
                             startOnReaction(
                                 message,
