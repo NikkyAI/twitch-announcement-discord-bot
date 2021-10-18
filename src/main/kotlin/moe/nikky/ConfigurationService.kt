@@ -81,7 +81,6 @@ class ConfigurationService : KoinComponent, Klogging {
         )
     )
 
-
     init {
         runBlocking {
             load()
@@ -92,7 +91,7 @@ class ConfigurationService : KoinComponent, Klogging {
         for (i in (0..10)) {
             delay(200)
             logger.infoF { "trying to load config" }
-            val state = getNullable(guild) ?: continue
+            val state = getNullable(guild?.id) ?: continue
             logger.infoF { "loaded config" }
             return state
         }
@@ -105,9 +104,6 @@ class ConfigurationService : KoinComponent, Klogging {
             logger.errorF {"no state stored for guild $guildId" }
             null
         }
-    }
-    suspend fun getNullable(guild: GuildBehavior?): BotState? {
-        return getNullable(guild?.id)
     }
 
     operator fun get(guild: GuildBehavior?): BotState {

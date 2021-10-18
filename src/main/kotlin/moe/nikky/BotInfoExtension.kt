@@ -28,6 +28,8 @@ class BotInfoExtension : Extension(), Klogging {
     private val inviteUrl: String = runBlocking {
         val permission = Permissions(
             Permission.ViewChannel,
+            Permission.SendMessages,
+            Permission.ManageMessages,
             Permission.ManageRoles,
         )
         val scopes = listOf(

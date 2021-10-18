@@ -40,7 +40,7 @@ val DOCKER_RENDERER: RenderString = { e: LogEvent ->
 
 val CUSTOM_RENDERER: RenderString = { e: LogEvent ->
     val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-    val time = e.timestamp.localString.padEnd(29, '0')
+    val time = e.timestamp.localString.substring(0..22)
     val message = "$time ${e.level} $loggerOrFile : ${e.evalTemplate()}"
     val cleanedItems = e.items - "file"
     val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
@@ -49,7 +49,7 @@ val CUSTOM_RENDERER: RenderString = { e: LogEvent ->
 }
 val CUSTOM_RENDERER_ANSI: RenderString = { e: LogEvent ->
     val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-    val time = e.timestamp.localString.padEnd(29, '0')
+    val time = e.timestamp.localString.substring(0..22)
     val message = "$time ${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
     val cleanedItems = e.items - "file"
     val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""

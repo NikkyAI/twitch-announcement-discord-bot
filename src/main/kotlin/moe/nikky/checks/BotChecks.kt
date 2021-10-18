@@ -8,12 +8,18 @@ import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
+import dev.kord.core.event.message.MessageCreateEvent
 import io.klogging.logger
 import moe.nikky.ConfigurationService
+import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
 
 suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: ConfigurationService) {
+    hasBotControl(config, event.getLocale())
+}
+
+suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, locale: Locale) {
     val guild = guildFor(event)
     val state = config[guild]
 
@@ -29,8 +35,8 @@ suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: Configura
     )
     if (!passed) {
         fail(
-            "must have permission: **${Permission.Administrator.translate(event.getLocale())}**"
-                + (state.adminRole?.let { "\nor role: ** ${it.mention}**" } ?: "\nand no adminrole is configured")
+            "must have permission: **${Permission.Administrator.translate(locale)}**"
+                    + (state.adminRole?.let { "\nor role: ** ${it.mention}**" } ?: "\nand no adminrole is configured")
         )
     }
 }

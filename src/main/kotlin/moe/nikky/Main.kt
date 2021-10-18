@@ -59,7 +59,7 @@ suspend fun main() {
             Level.INFO
         }
         sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
-        val timestamp = SimpleDateFormat("yyyy-dd-MM-HH-mm-ss").format(Date())
+        val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
         sink("file", CUSTOM_RENDERER, logFile(File("logs/log-$timestamp.log")))
         val seqServer = envOrNull("SEQ_SERVER") //?: "http://localhost:5341"
         if(seqServer != null) {
@@ -117,10 +117,10 @@ suspend fun main() {
 //            +Intent.GuildWebhooks
 //        }
 
-//        chatCommands {
-//            defaultPrefix = "!"
-//            enabled = true
-//        }
+        chatCommands {
+            defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
+            enabled = true
+        }
         i18n {
             defaultLocale = SupportedLocales.ENGLISH
         }
@@ -136,12 +136,12 @@ suspend fun main() {
             if(TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
-//            help {
-//                enableBundledExtension = true
-//                deleteInvocationOnPaginatorTimeout = true
-//                deletePaginatorOnTimeout = true
-//                pingInReply = true
-//            }
+            help {
+                enableBundledExtension = true
+                deleteInvocationOnPaginatorTimeout = true
+                deletePaginatorOnTimeout = true
+                pingInReply = true
+            }
         }
         presence {
             status = PresenceStatus.Idle

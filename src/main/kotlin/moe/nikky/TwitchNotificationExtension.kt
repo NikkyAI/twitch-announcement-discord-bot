@@ -6,16 +6,16 @@ import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChanne
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
+import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.botHasPermissions
-import com.kotlindiscord.kord.extensions.utils.envOrNull
-import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.*
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
+import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.TextChannelBehavior
 import dev.kord.core.behavior.channel.createWebhook
 import dev.kord.core.behavior.execute
@@ -36,11 +36,8 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
@@ -60,8 +57,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
-
-//    private lateinit var backgroundJob: Job
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
@@ -93,14 +88,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //        }
     }
 
-    @OptIn(ExperimentalTime::class)
-    private class TokenHolder(
-        val token: Token,
-        val epiration: Instant = Clock.System.now() + Duration.seconds(token.expires_in),
-    ) {
-
-    }
-
     inner class TwitchAddArgs : Arguments() {
         val role by role("role", "notification ping")
         val twitchUserName by string("twitch", "Twitch username")
@@ -117,6 +104,76 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             name = "twitch"
             description = "twitch notifications"
 
+            chatGroupCommand {
+                name = "twitch"
+                description = "be notified about more streamers"
+
+                chatCommand(::TwitchAddArgs) {
+                    name = "add"
+                    description = "be notified about more streamers"
+                    locking = true
+
+                    check {
+                        hasBotControl(config, event.getLocale())
+                    }
+
+                    requireBotPermissions(
+                        *requiredPermissions
+                    )
+                    action {
+                        val logger = this@TwitchNotificationExtension.logger
+                        val kord = this@TwitchNotificationExtension.kord
+                        withLogContext(event, guild) { guild ->
+                            val responseMessage =  add(
+                                guild,
+                                arguments,
+                                event.message.channel
+                            )
+
+                            val response = event.message.respond {
+                                content = responseMessage
+                            }
+                            event.message.delete()
+                            launch {
+                                delay(30_000)
+                                response.delete()
+                            }
+                        }
+                    }
+                }
+                chatCommand(::TwitchRemoveArgs) {
+                    name = "remove"
+                    description = "removes a streamer from notifications"
+
+                    check {
+                        hasBotControl(config, event.getLocale())
+                    }
+
+                    requireBotPermissions(
+                        Permission.ManageMessages
+                    )
+
+                    action {
+                        withLogContext(event, guild) { guild ->
+                            val responseMessage = remove(
+                                guild,
+                                arguments,
+                                event.message.channel
+                            )
+
+                            val response = event.message.respond {
+                                content = responseMessage
+                            }
+                            event.message.delete()
+                            launch {
+                                delay(30_000)
+                                response.delete()
+                            }
+                        }
+                    }
+
+                }
+            }
             ephemeralSubCommand(::TwitchAddArgs) {
                 name = "add"
                 description = "be notified about more streamers"
@@ -134,39 +191,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     val logger = this@TwitchNotificationExtension.logger
                     val kord = this@TwitchNotificationExtension.kord
                     withLogContext(event, guild) { guild ->
-                        val state = config[guild]
-
-                        val channelInput = arguments.channel ?: event.interaction.channel
-                        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-                            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
-
-                        val user = try {
-                            val token = httpClient.getToken() ?: relayError("cannot get twitch token")
-                            val userData = httpClient.getUsers(token, listOf(arguments.twitchUserName))
-                                ?: relayError("cannot fetch user data for <https://twitch.tv/${arguments.twitchUserName}>")
-                            userData[arguments.twitchUserName.lowercase()]
-                                ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
-                        } catch (e: IllegalStateException) {
-                            relayError(e.message
-                                ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
-                        }
-
-                        config[guild] = state.copy(
-                            twitchNotifications =
-                            state.twitchNotifications + Pair(
-                                first = "${user.login}_${channel.id.asString}",
-                                second = TwitchNotificationState(
-                                    channel = channel,
-                                    twitchUserName = user.login,
-                                    role = arguments.role,
-                                )
-                            )
+                        val responseMessage =  add(
+                            guild,
+                            arguments,
+                            event.interaction.channel
                         )
-                        config.save()
 
                         respond {
-                            content =
-                                "added  ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+                            content = responseMessage
                         }
                     }
                 }
@@ -186,31 +218,18 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val state = config[guild]
 
-                        val channelInput = arguments.channel ?: event.interaction.channel
-                        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-                            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
-
-                        val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
-                        val toRemove = state.twitchNotifications[toRemoveKey]
-
-                        config[guild] = state.copy(
-                            twitchNotifications = state.twitchNotifications.filterKeys { it != toRemoveKey }
+                        val responseMessage = remove(
+                            guild,
+                            arguments,
+                            event.interaction.channel
                         )
-                        config.save()
-
-//                    toRemove?.message?.delete()
-                        toRemove?.message?.let {
-                            channel.deleteMessage(it)
-                        }
 
                         respond {
-                            content = "removed ${arguments.twitchUserName} from ${channel.mention}"
+                            content = responseMessage
                         }
                     }
                 }
-
             }
 
             ephemeralSubCommand {
@@ -295,6 +314,62 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
+    private suspend fun add(guild: Guild, arguments: TwitchAddArgs, currentChannel: ChannelBehavior): String {
+        val state = config[guild]
+
+        val channelInput = arguments.channel ?: currentChannel
+        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
+            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+
+        val user = try {
+            val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+            val userData = httpClient.getUsers(token, listOf(arguments.twitchUserName))
+                ?: relayError("cannot fetch user data for <https://twitch.tv/${arguments.twitchUserName}>")
+            userData[arguments.twitchUserName.lowercase()]
+                ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
+        } catch (e: IllegalStateException) {
+            relayError(e.message
+                ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
+        }
+
+        config[guild] = state.copy(
+            twitchNotifications =
+            state.twitchNotifications + Pair(
+                first = "${user.login}_${channel.id.asString}",
+                second = TwitchNotificationState(
+                    channel = channel,
+                    twitchUserName = user.login,
+                    role = arguments.role,
+                )
+            )
+        )
+        config.save()
+
+        return "added ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+    }
+
+    private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
+        val state = config[guild]
+
+        val channelInput = arguments.channel ?: currentChannel
+        val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
+            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+
+        val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
+        val toRemove = state.twitchNotifications[toRemoveKey]
+
+        config[guild] = state.copy(
+            twitchNotifications = state.twitchNotifications.filterKeys { it != toRemoveKey }
+        )
+        config.save()
+
+        toRemove?.message?.let {
+            channel.deleteMessage(it)
+        }
+
+        return "removed ${arguments.twitchUserName} from ${channel.mention}"
+    }
+
     @OptIn(ExperimentalTime::class)
     private suspend fun getWebhook(channel: TextChannelBehavior): Webhook? {
         return try {
@@ -322,6 +397,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
+
     private suspend fun updateTwitchNotificationMessage(
         guildBehavior: GuildBehavior,
         twitchNotifSetting: TwitchNotificationState,
@@ -332,12 +408,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         gameData: TwitchGameData?,
         webhook: Webhook,
     ) {
-//        val webhook = getWebhook(twitchNotifSetting.channel) ?: run {
-//            logger.errorF { "failed to get webhook" }
-//            return
-//        }
-//        logger.debug { "webhook: $webhook" }
-
         suspend fun updateMessageId(messageId: Snowflake) {
             config[guildBehavior] = config[guildBehavior].let { state ->
                 val key = twitchNotifSetting.twitchUserName + "_" + twitchNotifSetting.channel.id.asString
@@ -596,7 +666,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun HttpClient.getStreams(token: Token, user_logins: List<String>): Map<String, StreamData>? {
-//        val token = getToken()
         if (clientId == null || clientSecret == null) return null
         val chunkedList = user_logins.chunked(100)
         return chunkedList.flatMap { chunk ->
@@ -612,7 +681,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
 
     private suspend fun HttpClient.getUsers(token: Token, logins: List<String>): Map<String, TwitchUserData>? {
-//        val token = getToken()
         if (clientId == null || clientSecret == null) return null
         val chunkedList = logins.chunked(100)
         return chunkedList.flatMap { chunk ->
@@ -628,7 +696,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun HttpClient.getLastVOD(token: Token, userId: String): TwitchVideoData? {
-//        val token = getToken()
         if (clientId == null || clientSecret == null) return null
         return get<JsonObject>(urlString = "$twitchApi/videos") {
             parameter("user_id", userId)
@@ -639,7 +706,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun HttpClient.getGames(token: Token, gameNames: List<String>): Map<String, TwitchGameData>? {
-//        val token = getToken()
         if (clientId == null || clientSecret == null) return null
         val chunkedList = gameNames.chunked(100)
         return chunkedList.flatMap { chunk ->
@@ -657,7 +723,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         token: Token,
         broadcasterIds: List<String>,
     ): Map<String, TwitchChannelInfo>? {
-//        val token = getToken()
         if (clientId == null || clientSecret == null) return null
         val chunkedList = broadcasterIds.chunked(100)
         return chunkedList.flatMap { chunk ->
@@ -694,8 +759,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 array
             )
         } catch (e: SerializationException) {
-            logger.errorF(e) { "twitch data failed to parse" }
-            logger.errorF { json.encodeToString(JsonElement.serializer(), array) }
+            logger.errorF(e) { "twitch data failed to parse: \n${json.encodeToString(JsonElement.serializer(), array)}" }
             return emptyList()
         }
     }
