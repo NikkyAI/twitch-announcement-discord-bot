@@ -74,8 +74,10 @@ suspend fun main() {
             toSink("file")
         }
         logging {
-            fromLoggerBase("moe.nikky", stopOnMatch = true)
-            sinksFromLevel(Level.DEBUG)
+            fromLoggerBase("moe.nikky")
+            fromMinLevel(Level.DEBUG) {
+                applySinks()
+            }
         }
         logging {
             fromLoggerBase("dev.kord.rest")
@@ -117,6 +119,7 @@ suspend fun main() {
 
         chatCommands {
             defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
+            logger.info { "default prefix: $defaultPrefix" }
             enabled = true
         }
         i18n {

@@ -3,6 +3,7 @@ package moe.nikky
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.commands.Arguments
+import com.kotlindiscord.kord.extensions.commands.CommandContext
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
@@ -14,9 +15,12 @@ import com.kotlindiscord.kord.extensions.utils.botHasPermissions
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.Permission
+import dev.kord.common.entity.Snowflake
+import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
-import dev.kord.core.behavior.channel.GuildMessageChannelBehavior
 import dev.kord.core.behavior.edit
+import dev.kord.core.entity.Guild
+import dev.kord.core.entity.GuildEmoji
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
@@ -27,10 +31,8 @@ import dev.kord.core.live.onReactionRemove
 import io.klogging.Klogging
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.*
 import moe.nikky.checks.hasBotControl
 import org.koin.core.component.inject
 import kotlin.time.ExperimentalTime
@@ -92,29 +94,29 @@ class RoleManagementExtension : Extension(), Klogging {
                     withLogContext(event, guild) { guild ->
                         val kord = this@RoleManagementExtension.kord
                         val logger = this@RoleManagementExtension.logger
-                        val state = config[guild]
+                        val guildConfig = config[guild]
                         val channel = event.interaction.channel.asChannel() as TextChannel
 
-                        val oldRolePickerMessageState = state.roleChooser[arguments.section]
+                        val oldRolePickerMessageConfig = guildConfig.roleChooser[arguments.section]
 
                         logger.info { "reaction: '${arguments.reaction}'" }
-                        val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
+                        val reactionEmoji = findEmoji(guild, arguments.reaction, this@action)
                             ?.let { ReactionEmoji.from(it) }
                             ?: ReactionEmoji.Unicode(arguments.reaction)
 
                         logger.info { "reaction emoji: $reactionEmoji" }
 
-                        val message = oldRolePickerMessageState?.getMessageOrRelayError()
+                        val message = oldRolePickerMessageConfig?.getMessageOrRelayError(guild)
                             ?: channel.createMessage("placeholder for section ${arguments.section}")
 
-                        val newRolePickerMessageState = RolePickerMessageState(
-                            channel = channel as GuildMessageChannelBehavior,
-                            messageId = message.id,
-                            roleMapping = (oldRolePickerMessageState?.roleMapping
-                                ?: emptyMap()) + (reactionEmoji to arguments.role),
+                        val newRolePickerMessageState = RolePickerMessageConfig(
+                            channel = channel.id,
+                            message = message.id,
+                            roleMapping = (oldRolePickerMessageConfig?.roleMapping
+                                ?: emptyMap()) + (reactionEmoji.mention to arguments.role.id),
                         )
-                        config[guild] = state.copy(
-                            roleChooser = state.roleChooser + Pair(
+                        config[guild] = guildConfig.copy(
+                            roleChooser = guildConfig.roleChooser + Pair(
                                 arguments.section,
                                 newRolePickerMessageState,
                             )
@@ -123,16 +125,18 @@ class RoleManagementExtension : Extension(), Klogging {
 
                         message.edit {
                             content = buildMessage(
+                                guild,
                                 arguments.section,
                                 newRolePickerMessageState
                             )
                         }
-                        newRolePickerMessageState.roleMapping.forEach { (reactionEmoji, _) ->
+                        newRolePickerMessageState.roleMapping(guild).forEach { (reactionEmoji, _) ->
                             message.addReaction(reactionEmoji)
                         }
 
-                        oldRolePickerMessageState?.liveMessageJob?.cancel()
+                        oldRolePickerMessageConfig?.liveMessageJob?.cancel()
                         startOnReaction(
+                            guild,
                             message,
                             arguments.section,
                             newRolePickerMessageState
@@ -160,28 +164,29 @@ class RoleManagementExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         val kord = this@RoleManagementExtension.kord
-                        val state = config[guild]
+                        val guildConfig = config[guild]
                         val channel = event.interaction.channel
 
-                        val oldRolePickerMessageState = state.roleChooser[arguments.section]
+                        val oldRolePickerMessageState = guildConfig.roleChooser[arguments.section]
                             ?: relayError("no roleselection section ${arguments.section}")
 
                         val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
                             ?.let { ReactionEmoji.from(it) }
                             ?: ReactionEmoji.Unicode(arguments.reaction)
 
-                        val removedRole = oldRolePickerMessageState.roleMapping[reactionEmoji] ?: relayError(
-                            "no role exists for ${reactionEmoji.mention}"
-                        )
+                        val removedRole = oldRolePickerMessageState.roleMapping[reactionEmoji.mention]?.let { removedRoleId ->
+                            guild.getRoleOrNull(removedRoleId)
+                        } ?: relayError("no role exists for ${reactionEmoji.mention}")
 
-                        val message = oldRolePickerMessageState.getMessageOrRelayError()
+                        val message = oldRolePickerMessageState.getMessageOrRelayError(guild)
                             ?: channel.createMessage("placeholder for section ${arguments.section}")
 
                         val newRolePickerMessageState = oldRolePickerMessageState.copy(
-                            roleMapping = oldRolePickerMessageState.roleMapping - reactionEmoji,
+                            roleMapping = oldRolePickerMessageState.roleMapping - reactionEmoji.mention,
                         )
                         message.edit {
                             content = buildMessage(
+                                guild,
                                 arguments.section,
                                 newRolePickerMessageState
                             )
@@ -197,8 +202,8 @@ class RoleManagementExtension : Extension(), Klogging {
                                 member.removeRole(removedRole.id)
                             }
                         message.asMessage().deleteReaction(reactionEmoji)
-                        config[guild] = state.copy(
-                            roleChooser = state.roleChooser + Pair(
+                        config[guild] = guildConfig.copy(
+                            roleChooser = guildConfig.roleChooser + Pair(
                                 arguments.section,
                                 newRolePickerMessageState,
                             )
@@ -237,12 +242,12 @@ class RoleManagementExtension : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val state = config.loadConfig(event.guild) ?: run {
+                    val guildConfig = config.loadConfig(event.guild) ?: run {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext
                     }
 
-                    state.roleChooser.map { it.value.channel }.distinct().forEach {
+                    guildConfig.roleChooser.map { it.value.channel(guild) }.distinct().forEach {
                         val channel = it.asChannel()
                         val missingPermissions = requiredPermissions.filterNot { permission ->
                             channel.botHasPermissions(permission)
@@ -258,18 +263,19 @@ class RoleManagementExtension : Extension(), Klogging {
                         }
                     }
 
-                    state.roleChooser.forEach { (section, rolePickerMessageState) ->
+                    guildConfig.roleChooser.forEach { (section, rolePickerMessageState) ->
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
-                            val message = rolePickerMessageState.getMessageOrRelayError()
-                                ?: rolePickerMessageState.channel.createMessage("placeholder for section ${section}")
+                            val message = rolePickerMessageState.getMessageOrRelayError(guild)
+                                ?: rolePickerMessageState.channel(guild).createMessage("placeholder for section ${section}")
                             message.edit {
                                 content = buildMessage(
+                                    guild,
                                     section,
                                     rolePickerMessageState
                                 )
                             }
-                            rolePickerMessageState.roleMapping.forEach { (emoji, role) ->
+                            rolePickerMessageState.roleMapping(guild).forEach { (emoji, role) ->
                                 val reactors = message.getReactors(emoji)
                                 reactors.map { it.asMemberOrNull(guild.id) }
                                     .filterNotNull()
@@ -280,6 +286,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                     }
                             }
                             startOnReaction(
+                                guild,
                                 message,
                                 section,
                                 rolePickerMessageState
@@ -294,20 +301,44 @@ class RoleManagementExtension : Extension(), Klogging {
         }
     }
 
-    private fun buildMessage(
+    private suspend fun buildMessage(
+        guildBehavior: GuildBehavior,
         section: String,
-        newRolePickerMessageState: RolePickerMessageState,
-    ) = "**${section}**: \n" + newRolePickerMessageState.roleMapping.entries.joinToString(
+        newRolePickerMessageState: RolePickerMessageConfig,
+    ) = "**${section}**: \n" + newRolePickerMessageState.roleMapping(guildBehavior).entries.joinToString(
         "\n") { (reactionEmoji, role) ->
         "${reactionEmoji.mention} `${role.name}`"
     }
 
+    private suspend fun findEmoji(guild: Guild, arg: String, context: CommandContext): GuildEmoji? =
+        if (arg.startsWith("<a:") || arg.startsWith("<:") && arg.endsWith('>')) { // Emoji mention
+            val id: String = arg.substring(0, arg.length - 1).split(":").last()
+
+            try {
+                guild.getEmojiOrNull(Snowflake(id))
+            } catch (e: NumberFormatException) {
+                throw DiscordRelayedException(
+                    context.translate("converters.emoji.error.invalid", replacements = arrayOf(id))
+                )
+            }
+        } else { // ID or name
+            val name = if (arg.startsWith(":") && arg.endsWith(":")) arg.substring(1, arg.length - 1) else arg
+
+            try {
+                guild.getEmojiOrNull(Snowflake(name))
+            } catch (e: NumberFormatException) {  // Not an ID, let's check names
+                guild.emojis.firstOrNull { emojiObj -> emojiObj.name?.lowercase().equals(name, true) }
+            }
+        }
+
     @OptIn(KordPreview::class)
     private suspend fun startOnReaction(
+        guildBehavior: GuildBehavior,
         message: MessageBehavior,
         section: String,
-        rolePickerMessageState: RolePickerMessageState,
+        rolePickerMessageState: RolePickerMessageConfig,
     ) {
+        rolePickerMessageState.liveMessageJob = Job()
         message.asMessage().live(
             CoroutineScope(
                 rolePickerMessageState.liveMessageJob
@@ -316,12 +347,14 @@ class RoleManagementExtension : Extension(), Klogging {
         ) {
             onReactionAdd { event ->
                 if (event.userId == kord.selfId) return@onReactionAdd
-                val role = rolePickerMessageState.roleMapping[event.emoji] ?: return@onReactionAdd
+                val roleId = rolePickerMessageState.roleMapping[event.emoji.mention] ?: return@onReactionAdd
+                val role = guildBehavior.getRole(roleId)
                 event.userAsMember?.addRole(role.id)
             }
             onReactionRemove { event ->
                 if (event.userId == kord.selfId) return@onReactionRemove
-                val role = rolePickerMessageState.roleMapping[event.emoji] ?: return@onReactionRemove
+                val roleId = rolePickerMessageState.roleMapping[event.emoji.mention] ?: return@onReactionRemove
+                val role = guildBehavior.getRole(roleId)
                 event.userAsMember?.removeRole(role.id)
             }
         }

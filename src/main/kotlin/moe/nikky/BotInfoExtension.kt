@@ -9,14 +9,10 @@ import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
-import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
 import io.klogging.Klogging
-import io.klogging.context.logContext
-import io.klogging.logger
 import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import moe.nikky.checks.hasBotControl
 import org.koin.core.component.inject
 
@@ -64,21 +60,22 @@ class BotInfoExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val state = config[guild]
+                        val guildConfig = config[guild]
 
                         respond {
-                            val choosableRoles = state.roleChooser.entries
-                                .joinToString("\n\n") { (section, rolePickerMessageState) ->
-                                    "**$section**:\n" + rolePickerMessageState.roleMapping.entries.joinToString("\n") { (reaction, role) ->
-                                        "  ${reaction.mention}: ${role.mention}"
-                                    }
+                            val choosableRoles = guildConfig.roleChooser.entries.map { (section, rolePickerMessageState) ->
+                                val roleMapping =rolePickerMessageState.roleMapping(guild)
+                                "**$section**:\n" + roleMapping.entries.joinToString("\n") { (reaction, role) ->
+                                    "  ${reaction.mention}: ${role.mention}"
                                 }
-
-                            val twitch = state.twitchNotifications.entries.joinToString("\n") {(_, twitchNotif) ->
-                                "<${twitchNotif.twitchUrl}> ${twitchNotif.role.mention} in ${twitchNotif.channel.mention}"
                             }
+                                .joinToString("\n\n")
+
+                            val twitch = guildConfig.twitchNotifications.entries.map { (_, twitchNotif) ->
+                                "<${twitchNotif.twitchUrl}> ${twitchNotif.role(guild).mention} in ${twitchNotif.channel(guild).mention}"
+                            }.joinToString("\n")
                             content = """
-                                |adminRole: ${state.adminRole?.mention}
+                                |adminRole: ${guildConfig.adminRole(guild)?.mention}
                                 |role pickers: 
                                 ${choosableRoles.indent("|  ")}
                                 |twitch notifications:

@@ -8,9 +8,9 @@ import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
-import dev.kord.core.event.message.MessageCreateEvent
 import io.klogging.logger
 import moe.nikky.ConfigurationService
+import moe.nikky.relayError
 import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
@@ -20,8 +20,8 @@ suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: Configura
 }
 
 suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, locale: Locale) {
-    val guild = guildFor(event)
-    val state = config[guild]
+    val guild = guildFor(event) ?: relayError("cannot load guild")
+    val guildConfig = config[guild]
 
     anyCheck(
         {
@@ -29,14 +29,14 @@ suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, loca
         },
         {
             hasRoleNullable { event ->
-                state.adminRole
+                guildConfig.adminRole(guild)
             }
         }
     )
     if (!passed) {
         fail(
             "must have permission: **${Permission.Administrator.translate(locale)}**"
-                    + (state.adminRole?.let { "\nor role: ** ${it.mention}**" } ?: "\nand no adminrole is configured")
+                    + (guildConfig.adminRole(guild)?.let { "\nor role: ** ${it.mention}**" } ?: "\nand no adminrole is configured")
         )
     }
 }

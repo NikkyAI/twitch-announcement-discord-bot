@@ -2,10 +2,8 @@ package moe.nikky
 
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import dev.kord.common.entity.Snowflake
-import dev.kord.core.Kord
 import dev.kord.core.behavior.GuildBehavior
 import io.klogging.Klogging
-import io.klogging.logger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerializationException
@@ -17,10 +15,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import moe.nikky.json.VersionMigrator
 import moe.nikky.json.VersionedSerializer
-import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import java.io.File
-import java.util.*
 
 class ConfigurationService : KoinComponent, Klogging {
     private val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
@@ -31,21 +27,21 @@ class ConfigurationService : KoinComponent, Klogging {
         encodeDefaults = true
     }
 
-    private val states: MutableMap<Snowflake, BotState> = Collections.synchronizedMap(mutableMapOf())
-    private var serializedStates: Map<String, ConfigurationStateSerialized> = emptyMap()
+    private val configurations: MutableMap<String, GuildConfiguration> = mutableMapOf()
+//    private var configurations: MutableMap<String, ConfigurationStateSerialized> = mutableMapOf()
 
     private fun <K, V> Map<K, V>.replaceKey(oldKey: K, newKey: K, transform: (V) -> V = { it }): Map<K, V> =
         this - oldKey + (newKey to transform(getValue(oldKey)))
 
     private fun <K, V> Map<K, V>.replaceValue(key: K, transform: (V) -> V): Map<K, V> =
-        this  + (key to transform(getValue(key)))
+        this + (key to transform(getValue(key)))
 
     private fun Map<String, JsonElement>.toJsonObject() = JsonObject(this)
 
     val versionedSerializer = VersionedSerializer(
         MapSerializer(
             String.serializer(),
-            ConfigurationStateSerialized.serializer()
+            GuildConfiguration.serializer()
         ),
         currentVersion = 2,
         migrations = mapOf(
@@ -87,35 +83,35 @@ class ConfigurationService : KoinComponent, Klogging {
         }
     }
 
-    suspend fun loadConfig(guild: GuildBehavior?): BotState? {
+    suspend fun loadConfig(guild: GuildBehavior?): GuildConfiguration? {
         for (i in (0..10)) {
             delay(200)
             logger.infoF { "trying to load config" }
-            val state = getNullable(guild?.id) ?: continue
+            val guildConfig = getNullable(guild?.id) ?: continue
             logger.infoF { "loaded config" }
-            return state
+            return guildConfig
         }
         return null
     }
 
-    private suspend fun getNullable(guildId: Snowflake?): BotState? {
+    private suspend fun getNullable(guildId: Snowflake?): GuildConfiguration? {
         if (guildId == null) return null
-        return states[guildId] ?: run {
-            logger.errorF {"no state stored for guild $guildId" }
+        return configurations[guildId.asString] ?: run {
+            logger.errorF { "no state stored for guild $guildId" }
             null
         }
     }
 
-    operator fun get(guild: GuildBehavior?): BotState {
+    operator fun get(guild: GuildBehavior?): GuildConfiguration {
         return runBlocking {
             getNullable(guild?.id) ?: relayError("error fetching configuration state")
         }
     }
 
 
-    operator fun set(guildId: Snowflake?, value: BotState?) {
+    operator fun set(guildId: Snowflake?, value: GuildConfiguration?) {
         if (value != null && guildId != null) {
-            states[guildId] = value
+            configurations[guildId.asString] = value
         } else {
             runBlocking {
                 logger.errorF { "failed to store in $guildId : $value" }
@@ -123,63 +119,57 @@ class ConfigurationService : KoinComponent, Klogging {
         }
     }
 
-    operator fun set(guild: GuildBehavior?, value: BotState?) {
+    operator fun set(guild: GuildBehavior?, value: GuildConfiguration?) {
         set(guild?.id, value)
     }
 
     private suspend fun load() {
         logger.infoF { "loading from ${configFile.absolutePath}" }
         configFile.absoluteFile.parentFile.mkdirs()
-        if(!configFile.exists()) {
-            serializedStates = emptyMap()
+        val newConfigurations  = if (!configFile.exists()) {
+            mutableMapOf()
         } else {
-            serializedStates = try {
+            try {
                 json.decodeFromString(
                     versionedSerializer,
                     configFile.readText()
-                )
+                ).toMutableMap()
             } catch (e: SerializationException) {
                 e.printStackTrace()
                 throw e
             }
         }
+        configurations += newConfigurations
     }
 
     suspend fun save() {
-        serializedStates = states.entries.associate { (k, v) ->
-            k.asString to v.asSerialized()
-        }.also { serializedStates ->
-            val serialized = try {
-                json.encodeToString(
-                    versionedSerializer,
-                    serializedStates
-                )
-            } catch (e: SerializationException) {
-                e.printStackTrace()
-                e.stackTraceToString()
-            }
-            logger.infoF { "saving to ${configFile.absolutePath}" }
-            configFile.absoluteFile.parentFile.mkdirs()
-            if (!configFile.exists()) configFile.createNewFile()
-            configFile.writeText(serialized)
+        val serialized = try {
+            json.encodeToString(
+                versionedSerializer,
+                configurations
+            )
+        } catch (e: SerializationException) {
+            e.printStackTrace()
+            e.stackTraceToString()
         }
+        logger.infoF { "saving to ${configFile.absolutePath}" }
+        configFile.absoluteFile.parentFile.mkdirs()
+        if (!configFile.exists()) configFile.createNewFile()
+        configFile.writeText(serialized)
     }
 
-    suspend fun initializeGuild(kord: Kord, guildBehavior: GuildBehavior) {
-        val guild = guildBehavior.asGuild()
-        logger.infoF { "configuring ${guild.name}" }
-
-        val serializedConfig = serializedStates[guildBehavior.id.asString]?.also {
-            logger.infoF { "loaded serialized config from file for ${guild.name}" }
-        } ?: ConfigurationStateSerialized().also {
-            logger.infoF { "created default serialized config" }
-        }
-
-        logger.infoF { "building state" }
-        val state = serializedConfig.resolve(kord, guildBehavior)
-
-        this[guildBehavior] = state
-        logger.infoF { "FINISHED configuration of ${guild.name}" }
-    }
+//    suspend fun initializeGuild(kord: Kord, guildBehavior: GuildBehavior) {
+//        val guild = guildBehavior.asGuild()
+//        logger.infoF { "configuring ${guild.name}" }
+//
+//        val serializedConfig = serializedStates[guildBehavior.id.asString]?.also {
+//            logger.infoF { "loaded serialized config from file for ${guild.name}" }
+//        } ?: ConfigurationStateSerialized().also {
+//            logger.infoF { "created default serialized config" }
+//        }
+//
+//        set(guildBehavior, serializedConfig)
+//        logger.infoF { "FINISHED configuration of ${guild.name}" }
+//    }
 
 }

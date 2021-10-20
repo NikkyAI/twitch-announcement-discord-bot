@@ -242,14 +242,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val state = config[guild]
+                        val guildConfig = config[guild]
 
-                        val messages = state.twitchNotifications.map { (key, entry) ->
+                        val messages = guildConfig.twitchNotifications.map { (key, entry) ->
                             val message = entry.message?.let { channel.getMessageOrNull(it) }
                             """
                             <https://twitch.tv/${entry.twitchUserName}>
-                            ${entry.role.mention}
-                            ${entry.channel.mention}
+                            ${entry.role(guild).mention}
+                            ${entry.channel(guild).mention}
                             ${message?.getJumpUrl()}
                         """.trimIndent()
                         }
@@ -288,11 +288,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val state = config.loadConfig(event.guild) ?: run {
+                    val guildConfig = config.loadConfig(event.guild) ?: run {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext
                     }
-                    val validChannels = state.twitchNotifications.map { it.value.channel }.distinct().filter {
+                    val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
                         val channel = it.asChannel()
                         val hasPermissions = channel.botHasPermissions(*requiredPermissions)
                         if (!hasPermissions) {
@@ -315,7 +315,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun add(guild: Guild, arguments: TwitchAddArgs, currentChannel: ChannelBehavior): String {
-        val state = config[guild]
+        val guildConfig = config[guild]
 
         val channelInput = arguments.channel ?: currentChannel
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
@@ -332,14 +332,15 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
         }
 
-        config[guild] = state.copy(
+        config[guild] = guildConfig.copy(
             twitchNotifications =
-            state.twitchNotifications + Pair(
+            guildConfig.twitchNotifications + Pair(
                 first = "${user.login}_${channel.id.asString}",
-                second = TwitchNotificationState(
-                    channel = channel,
+                second = TwitchNotificationConfig(
+                    channel = channel.id,
                     twitchUserName = user.login,
-                    role = arguments.role,
+                    role = arguments.role.id,
+                    message = null,
                 )
             )
         )
@@ -349,17 +350,17 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
-        val state = config[guild]
+        val guildConfig = config[guild]
 
         val channelInput = arguments.channel ?: currentChannel
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
             ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
 
         val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
-        val toRemove = state.twitchNotifications[toRemoveKey]
+        val toRemove = guildConfig.twitchNotifications[toRemoveKey]
 
-        config[guild] = state.copy(
-            twitchNotifications = state.twitchNotifications.filterKeys { it != toRemoveKey }
+        config[guild] = guildConfig.copy(
+            twitchNotifications = guildConfig.twitchNotifications.filterKeys { it != toRemoveKey }
         )
         config.save()
 
@@ -383,7 +384,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             } ?: channel.createWebhook(name = WEBHOOK_NAME) {
                 @Suppress("BlockingMethodInNonBlockingContext")
                 avatar = Image.raw(
-                    data = TwitchNotificationState::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
+                    data = TwitchNotificationExtension::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
                         ?.readAllBytes() ?: error("failed to read bytes"),
                     format = Image.Format.PNG,
                 )
@@ -400,7 +401,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
     private suspend fun updateTwitchNotificationMessage(
         guildBehavior: GuildBehavior,
-        twitchNotifSetting: TwitchNotificationState,
+        twitchNotificationConfig: TwitchNotificationConfig,
         token: Token,
         usersData: TwitchUserData,
         channelInfo: TwitchChannelInfo,
@@ -410,7 +411,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     ) {
         suspend fun updateMessageId(messageId: Snowflake) {
             config[guildBehavior] = config[guildBehavior].let { state ->
-                val key = twitchNotifSetting.twitchUserName + "_" + twitchNotifSetting.channel.id.asString
+                val key = twitchNotificationConfig.twitchUserName + "_" + twitchNotificationConfig.channel.asString
                 val twitchNotificationState = state.twitchNotifications[key]!!
 
                 state.copy(
@@ -423,7 +424,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             config.save()
         }
 
-        val oldMessage = twitchNotifSetting.message?.let { twitchNotifSetting.channel.getMessageOrNull(it) }
+        val oldMessage = twitchNotificationConfig.message?.let { twitchNotificationConfig.channel(guildBehavior).getMessageOrNull(it) }
         if (streamData != null) {
             // live
             if (oldMessage != null) {
@@ -433,7 +434,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                     // TODO: check title, timestamp and game_name, only edit if different
                     val oldEmbed = oldMessage.embeds.firstOrNull()
-                    val messageContent = "<https://twitch.tv/${usersData.login}> \n ${twitchNotifSetting.role.mention}"
+                    val messageContent = "<https://twitch.tv/${usersData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                     val editMessage = when {
                         oldEmbed == null -> true
                         oldMessage.content != messageContent -> true
@@ -462,7 +463,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             val messageId = webhook.execute(webhook.token!!) {
                 username = usersData.display_name
                 avatarUrl = usersData.profile_image_url
-                content = "<https://twitch.tv/${usersData.login}> \n ${twitchNotifSetting.role.mention}"
+                content = "<https://twitch.tv/${usersData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                 embed {
                     buildEmbed(usersData, streamData, gameData)
                 }
@@ -539,7 +540,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
     private suspend fun checkTwitchStreamers(
         guildBehavior: GuildBehavior,
-        state: BotState,
+        state: GuildConfiguration,
         token: Token,
         userDataMap: Map<String, TwitchUserData>,
         streamDataMap: Map<String, StreamData>,
@@ -550,7 +551,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         state.twitchNotifications.forEach { (_, twitchNotifSetting) ->
             val userData = userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@forEach
             val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@forEach
-            val webhook = webhooks[twitchNotifSetting.channel.id] ?: return@forEach
+            val webhook = webhooks[twitchNotifSetting.channel] ?: return@forEach
             val streamData = streamDataMap[userData.login.lowercase()]
             val gameData = gameDataMap[streamData?.game_name?.lowercase()]
             updateTwitchNotificationMessage(
@@ -567,13 +568,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun checkStreams(guild: Guild, validChannels: List<TextChannelBehavior>) = coroutineScope {
-        val state = config[guild]
-        if (state.twitchNotifications.isEmpty()) return@coroutineScope
+        val guildConfig = config[guild]
+        if (guildConfig.twitchNotifications.isEmpty()) return@coroutineScope
 
         logger.traceF { "checking twitch status" }
 
         //TODO: check required permission in channels
-        state.twitchNotifications.map { it.value.channel }.distinct().forEach {
+        guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().forEach {
             val channel = it.asChannel()
             val hasPermissions = channel.botHasPermissions(*requiredPermissions)
             if (!hasPermissions) {
@@ -581,7 +582,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }
 
-        val filteredNotifications = state.twitchNotifications.filter { it.value.channel in validChannels }
+        val filteredNotifications = guildConfig.twitchNotifications.filter { it.value.channel(guild) in validChannels }
 
         val webhooks = validChannels.mapNotNull { channel ->
             withContext(logContext("channel" to channel.asChannel().name)) {
@@ -589,19 +590,19 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }.associateBy { it.channel.id }
 
-        val configStates = listOf(state)
+        val configStates = listOf(guildConfig)
 
         val token = httpClient.getToken() ?: return@coroutineScope
         val streamDataMap = httpClient.getStreams(
             token,
-            state.let {
-                filteredNotifications.values.map(TwitchNotificationState::twitchUserName)
+            guildConfig.let {
+                filteredNotifications.values.map(TwitchNotificationConfig::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
         val userDataMap = httpClient.getUsers(
             token,
-            state.let {
-                filteredNotifications.values.map(TwitchNotificationState::twitchUserName)
+            guildConfig.let {
+                filteredNotifications.values.map(TwitchNotificationConfig::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
         val gameDataMap = httpClient.getGames(
@@ -630,7 +631,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             launch(
 
             ) {
-                checkTwitchStreamers(state.guildBehavior,
+                checkTwitchStreamers(
+                    guild,
                     state,
                     token,
                     userDataMap,
