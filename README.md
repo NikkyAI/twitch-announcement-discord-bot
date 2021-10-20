@@ -1,8 +1,12 @@
 # twitch notifications discord bot
 ## twitch notifications
 
+the bot will not automatically get webhook management permissions because the usual setup for notification channels is to disallow `@everyone` from everything but seeing the channel
+so you will need to add a override for the bot role (`Yuno`) anyways
+
 to check if the permission setup is correct run  
-`/twitch check`
+`/twitch check`  
+it will tell you the missing permissions
 
 ### add a twitch notification
 
@@ -12,7 +16,8 @@ optionally you can pass `channe:#channel`, by default it uses the current channe
 ## role selection
 
 to check if the permission setup is correct run  
-`/role check`
+`/role check`  
+it will tell you the missing permissions
 
 make sure that the bot role (`Yuno`) is above all of the roles that you want ot make selectable
 (discord will not let the bot assign roles that are above itself in the list)

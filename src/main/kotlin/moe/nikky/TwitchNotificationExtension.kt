@@ -780,7 +780,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             )
         } catch (e: SerializationException) {
             logger.errorF(e) {
-                "twitch data failed to parse: \n${
+                "twitch data failed to parse key $key: \n${
                     json.encodeToString(JsonElement.serializer(),
                         array)
                 }"
