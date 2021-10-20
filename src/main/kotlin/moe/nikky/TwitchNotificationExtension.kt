@@ -38,6 +38,7 @@ import io.klogging.Klogging
 import io.klogging.context.logContext
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.features.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
@@ -509,7 +510,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             **${vod.title}**
                             ${channelInfo.game_name}
                             """.trimIndent()
-                        } else ""
+                        } else
+                            """
+                            last played: **${channelInfo.game_name}**
+                            """.trimIndent()
                 val messageId = if (oldMessage != null) {
                     kord.rest.webhook.editWebhookMessage(webhook.id, webhook.token!!, oldMessage.id) {
                         content = message
@@ -683,7 +687,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         logger.errorF(e) { e.message }
                     }
                 }
-
             }
         }
     }
@@ -818,17 +821,21 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 header("Authorization", "Bearer ${token.access_token}")
             }.parseData(TwitchUserData.serializer())
         }.associateBy { it.login.lowercase() }
-
     }
 
     private suspend fun HttpClient.getLastVOD(token: Token, userId: String): TwitchVideoData? {
         if (clientId == null || clientSecret == null) return null
-        return get<JsonObject>(urlString = "$twitchApi/videos") {
-            parameter("user_id", userId)
-            parameter("last", "1")
-            header("Client-ID", clientId)
-            header("Authorization", "Bearer ${token.access_token}")
-        }.parseData(TwitchVideoData.serializer()).firstOrNull()
+        return try {
+            get<JsonObject>(urlString = "$twitchApi/videos") {
+                parameter("user_id", userId)
+                parameter("last", "1")
+                header("Client-ID", clientId)
+                header("Authorization", "Bearer ${token.access_token}")
+            }.parseData(TwitchVideoData.serializer()).firstOrNull()
+        } catch(e: ServerResponseException) {
+            logger.errorF { e.message }
+            null
+        }
     }
 
     private suspend fun HttpClient.getGames(token: Token, gameNames: List<String>): Map<String, TwitchGameData>? {
