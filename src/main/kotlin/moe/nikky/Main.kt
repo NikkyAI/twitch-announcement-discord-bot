@@ -98,7 +98,7 @@ suspend fun main() {
             }
         }
         logging {
-            fromMinLevel(rootLogLevel) {
+            fromMinLevel(Level.DEBUG) {
                 applySinks()
             }
         }

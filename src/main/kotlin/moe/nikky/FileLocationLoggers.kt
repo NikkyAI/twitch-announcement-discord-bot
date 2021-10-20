@@ -30,30 +30,6 @@ fun getLocation(debug: Boolean = false): String? {
     }
 }
 
-suspend inline fun Klogger.infoF(template: String, vararg values: Any?) {
-    logF(Level.INFO, template, values)
-}
-
-suspend inline fun Klogger.debugF(template: String, vararg values: Any?) {
-    logF(Level.DEBUG, template, values)
-}
-
-suspend inline fun Klogger.traceF(template: String, vararg values: Any?) {
-    logF(Level.TRACE, template, values)
-}
-
-suspend fun Klogger.logF(level: Level, template: String, vararg values: Any?) {
-    if (!isLevelEnabled(level)) return
-    val location = getLocation()
-    if (location != null) {
-        withContext(logContext("file" to location)) {
-            log(level, template, values)
-        }
-    } else {
-        log(level, template, values)
-    }
-}
-
 suspend fun Klogger.fatalF(event: suspend Klogger.() -> Any?) {
     logF(Level.FATAL, event)
 }

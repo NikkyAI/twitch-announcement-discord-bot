@@ -100,80 +100,78 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     override suspend fun setup() {
+        chatGroupCommand {
+            name = "twitch"
+            description = "be notified about more streamers"
+
+            chatCommand(::TwitchAddArgs) {
+                name = "add"
+                description = "be notified about more streamers"
+                locking = true
+
+                check {
+                    hasBotControl(config, event.getLocale())
+                }
+
+                requireBotPermissions(
+                    *requiredPermissions
+                )
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage =  add(
+                            guild,
+                            arguments,
+                            event.message.channel
+                        )
+
+                        val response = event.message.respond {
+                            content = responseMessage
+                        }
+                        event.message.delete()
+                        launch {
+                            delay(30_000)
+                            response.delete()
+                        }
+                    }
+                }
+            }
+            chatCommand(::TwitchRemoveArgs) {
+                name = "remove"
+                description = "removes a streamer from notifications"
+
+                check {
+                    hasBotControl(config, event.getLocale())
+                }
+
+                requireBotPermissions(
+                    Permission.ManageMessages
+                )
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage = remove(
+                            guild,
+                            arguments,
+                            event.message.channel
+                        )
+
+                        val response = event.message.respond {
+                            content = responseMessage
+                        }
+                        event.message.delete()
+                        launch {
+                            delay(30_000)
+                            response.delete()
+                        }
+                    }
+                }
+
+            }
+        }
         ephemeralSlashCommand {
             name = "twitch"
             description = "twitch notifications"
 
-            chatGroupCommand {
-                name = "twitch"
-                description = "be notified about more streamers"
-
-                chatCommand(::TwitchAddArgs) {
-                    name = "add"
-                    description = "be notified about more streamers"
-                    locking = true
-
-                    check {
-                        hasBotControl(config, event.getLocale())
-                    }
-
-                    requireBotPermissions(
-                        *requiredPermissions
-                    )
-                    action {
-                        val logger = this@TwitchNotificationExtension.logger
-                        val kord = this@TwitchNotificationExtension.kord
-                        withLogContext(event, guild) { guild ->
-                            val responseMessage =  add(
-                                guild,
-                                arguments,
-                                event.message.channel
-                            )
-
-                            val response = event.message.respond {
-                                content = responseMessage
-                            }
-                            event.message.delete()
-                            launch {
-                                delay(30_000)
-                                response.delete()
-                            }
-                        }
-                    }
-                }
-                chatCommand(::TwitchRemoveArgs) {
-                    name = "remove"
-                    description = "removes a streamer from notifications"
-
-                    check {
-                        hasBotControl(config, event.getLocale())
-                    }
-
-                    requireBotPermissions(
-                        Permission.ManageMessages
-                    )
-
-                    action {
-                        withLogContext(event, guild) { guild ->
-                            val responseMessage = remove(
-                                guild,
-                                arguments,
-                                event.message.channel
-                            )
-
-                            val response = event.message.respond {
-                                content = responseMessage
-                            }
-                            event.message.delete()
-                            launch {
-                                delay(30_000)
-                                response.delete()
-                            }
-                        }
-                    }
-
-                }
-            }
             ephemeralSubCommand(::TwitchAddArgs) {
                 name = "add"
                 description = "be notified about more streamers"
@@ -188,8 +186,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 )
 
                 action {
-                    val logger = this@TwitchNotificationExtension.logger
-                    val kord = this@TwitchNotificationExtension.kord
                     withLogContext(event, guild) { guild ->
                         val responseMessage =  add(
                             guild,
@@ -218,7 +214,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-
                         val responseMessage = remove(
                             guild,
                             arguments,
@@ -275,6 +270,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 requireBotPermissions(
                     *requiredPermissions
                 )
+                check {
+                    hasBotControl(config)
+                }
 
                 action {
                     respond {
