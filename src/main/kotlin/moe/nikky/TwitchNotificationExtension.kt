@@ -304,8 +304,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     backgroundJob = kord.launch(coroutineContext) {
                         while (true) {
                             delay(15_000)
-                            kord.guilds.toList().chunked(10).forEach { chunk ->
-                                checkStreams(chunk)
+                            val token = httpClient.getToken()
+                            if (token != null) {
+                                kord.guilds.toList().chunked(10).forEach { chunk ->
+                                    checkStreams(chunk, token)
+                                }
+                            } else {
+                                logger.errorF { "failed to acquire token" }
                             }
 //                            kord.guilds.collect { guild ->
 //                                checkStreams(guild)
@@ -591,14 +596,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
-    private suspend fun checkStreams(guilds: List<Guild>) = coroutineScope {
+    private suspend fun checkStreams(guilds: List<Guild>, token: Token) = coroutineScope {
         val guildConfigs = guilds.mapNotNull { guild ->
             config[guild].takeIf { it.twitchNotifications.isNotEmpty() }?.let {
                 guild to it
             }
         }.toMap()
 
-        logger.traceF { "checking twitch status" }
+        logger.traceF { "checking twitch status for ${guilds.map { it.name }}" }
 
         // check required permission in channels
 //        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
@@ -620,8 +625,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }.associateBy { it.channel.id }
 
-
-        val token = httpClient.getToken() ?: return@coroutineScope
         val streamDataMap = httpClient.getStreams(
             token,
             guildConfigs.values.flatMap { guildConfig ->
@@ -677,7 +680,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     } catch (e: DiscordRelayedException) {
                         logger.errorF { e.cause }
                     } catch (e: Exception) {
-                        logger.errorF { e.message }
+                        logger.errorF(e) { e.message }
                     }
                 }
 
@@ -685,7 +688,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
-    private suspend fun checkStreams(guild: Guild) = coroutineScope {
+    private suspend fun checkStreams(guild: Guild, token: Token) = coroutineScope {
         val guildConfig = config[guild]
         if (guildConfig.twitchNotifications.isEmpty()) return@coroutineScope
 
