@@ -7,34 +7,27 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
-import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
-import io.klogging.config.DEFAULT_CONSOLE
 import io.klogging.config.LevelRange
 import io.klogging.config.loggingConfiguration
 import io.klogging.config.seq
 import io.klogging.logger
-import io.klogging.rendering.RENDER_ANSI
-import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.debug.DebugProbes
-import kotlinx.datetime.Clock
-import kotlinx.datetime.toJavaInstant
 import org.koin.dsl.module
 import java.io.File
 import java.security.Security
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.time.ExperimentalTime
-import kotlin.time.measureTime
 
 private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
 
 @Deprecated("remove")
-val commandPrefix: String = if(TEST_GUILD_ID != null) "" else ""
+val commandPrefix: String = if (TEST_GUILD_ID != null) "" else ""
 
 val dockerLogging = envOrNull("DOCKER_LOGGING") == "true"
 
@@ -50,7 +43,7 @@ suspend fun main() {
 
 
     loggingConfiguration {
-        if(dockerLogging) {
+        if (dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
         } else {
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
@@ -59,12 +52,12 @@ suspend fun main() {
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
         sink("file", CUSTOM_RENDERER, logFile(File("logs/log-$timestamp.log")))
         val seqServer = envOrNull("SEQ_SERVER") //?: "http://localhost:5341"
-        if(seqServer != null) {
+        if (seqServer != null) {
             sink("seq", seq(seqServer))
         }
         fun LevelRange.applySinks() {
             toSink("stdout")
-            if(seqServer != null) {
+            if (seqServer != null) {
                 toSink("seq")
             }
             toSink("file_latest")
@@ -108,7 +101,7 @@ suspend fun main() {
     }
     val token = env("BOT_TOKEN")
 
-    if(!dockerLogging) {
+    if (!dockerLogging) {
         logger.warnF { "WARN" }
         logger.errorF { "ERROR" }
         logger.fatalF { "FATAL" }
@@ -137,7 +130,7 @@ suspend fun main() {
             add(::DiceExtension)
             add(::RoleManagementExtension)
             add(::TwitchNotificationExtension)
-            if(TEST_GUILD_ID != null) {
+            if (TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
             help {

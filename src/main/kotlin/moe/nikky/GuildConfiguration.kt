@@ -1,8 +1,8 @@
 package moe.nikky
 
 import dev.kord.common.entity.Snowflake
-import dev.kord.core.behavior.*
-import dev.kord.core.behavior.channel.TextChannelBehavior
+import dev.kord.core.behavior.GuildBehavior
+import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
@@ -19,7 +19,7 @@ data class GuildConfiguration(
     val adminRole: Snowflake? = null,
     val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
-): Klogging {
+) : Klogging {
     suspend fun adminRole(guildBehavior: GuildBehavior): Role? {
         return adminRole?.let { guildBehavior.getRoleOrNull(it) }
     }
@@ -30,7 +30,7 @@ data class RolePickerMessageConfig(
     val channel: Snowflake,
     val message: Snowflake,
     val roleMapping: Map<String, Snowflake>,
-): Klogging {
+) : Klogging {
     @Transient
     var liveMessageJob: Job = Job()
     suspend fun roleMapping(guildBehavior: GuildBehavior): Map<ReactionEmoji, Role> {
@@ -41,9 +41,12 @@ data class RolePickerMessageConfig(
             reactionEmoji to guildBehavior.getRole(role)
         }
     }
+
     suspend fun channel(guildBehavior: GuildBehavior): TextChannel {
-        return guildBehavior.getChannelOfOrNull<TextChannel>(channel) ?: relayError("channel $channel could not be loaded as TextChannel")
+        return guildBehavior.getChannelOfOrNull<TextChannel>(channel)
+            ?: relayError("channel $channel could not be loaded as TextChannel")
     }
+
     suspend fun getMessageOrRelayError(guildBehavior: GuildBehavior): Message? = try {
         channel(guildBehavior).getMessageOrNull(message)
     } catch (e: KtorRequestException) {
@@ -58,13 +61,15 @@ data class TwitchNotificationConfig(
     val channel: Snowflake,
     val role: Snowflake,
     val message: Snowflake? = null,
-): Klogging {
+) : Klogging {
     val twitchUrl: String get() = "https://twitch.tv/$twitchUserName"
 
     suspend fun role(guildBehavior: GuildBehavior): Role {
         return guildBehavior.getRoleOrNull(role) ?: relayError("role $role could not be loaded")
     }
+
     suspend fun channel(guildBehavior: GuildBehavior): TextChannel {
-        return guildBehavior.getChannelOfOrNull<TextChannel>(channel) ?: relayError("channel $channel could not be loaded as TextChannel")
+        return guildBehavior.getChannelOfOrNull<TextChannel>(channel)
+            ?: relayError("channel $channel could not be loaded as TextChannel")
     }
 }

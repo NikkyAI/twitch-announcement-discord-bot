@@ -4,7 +4,6 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import io.klogging.Klogging
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationException
@@ -87,7 +86,7 @@ class ConfigurationService : KoinComponent, Klogging {
     }
 
     operator fun get(guild: GuildBehavior?): GuildConfiguration {
-        if(guild == null) {
+        if (guild == null) {
             relayError("guild was null")
         }
         return configurations[guild.id.asString] ?: GuildConfiguration()
@@ -125,6 +124,7 @@ class ConfigurationService : KoinComponent, Klogging {
     }
 
     suspend fun save() {
+        logger.debugF { "saving" }
         val serialized = try {
             json.encodeToString(
                 versionedSerializer,

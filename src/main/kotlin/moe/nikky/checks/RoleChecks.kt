@@ -3,7 +3,6 @@ package moe.nikky.checks
 import com.kotlindiscord.kord.extensions.checks.failed
 import com.kotlindiscord.kord.extensions.checks.nullMember
 import com.kotlindiscord.kord.extensions.checks.passed
-import com.kotlindiscord.kord.extensions.checks.types.Check
 import com.kotlindiscord.kord.extensions.checks.types.CheckContext
 import dev.kord.core.behavior.RoleBehavior
 import dev.kord.core.event.Event
@@ -11,7 +10,7 @@ import kotlinx.coroutines.flow.toList
 import mu.KotlinLogging
 
 
-public suspend fun <T: Event> CheckContext<T>.hasRoleNullable(builder: suspend (T) -> RoleBehavior?) {
+public suspend fun <T : Event> CheckContext<T>.hasRoleNullable(builder: suspend (T) -> RoleBehavior?) {
     if (!passed) {
         return
     }
@@ -26,7 +25,7 @@ public suspend fun <T: Event> CheckContext<T>.hasRoleNullable(builder: suspend (
     } else {
         val role = builder(event)
 
-        if(role != null) {
+        if (role != null) {
             if (member.asMember().roles.toList().contains(role)) {
                 logger.passed()
 

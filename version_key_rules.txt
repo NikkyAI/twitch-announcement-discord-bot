@@ -1,4 +1,4 @@
-com.kotlindiscord.kord.extensions:kord-extensions
+com.kotlindiscord.kord.extensions:*
                   ^^^^^^^^^^^^^^^
 
 io.github.microutils:kotlin-logging

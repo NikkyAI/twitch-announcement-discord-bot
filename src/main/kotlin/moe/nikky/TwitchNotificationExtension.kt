@@ -25,7 +25,6 @@ import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
-import dev.kord.gateway.Intent
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
@@ -38,9 +37,12 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
@@ -190,7 +192,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val responseMessage =  add(
+                        val responseMessage = add(
                             guild,
                             arguments,
                             event.interaction.channel
@@ -290,14 +292,15 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             action {
                 withLogContext(event, event.guild) { guild ->
                     val guildConfig = config[event.guild]
-                    val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
-                        val channel = it.asChannel()
-                        val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-                        if (!hasPermissions) {
-                            logger.errorF { "missing permissions in channel ${channel.name}" }
+                    val validChannels =
+                        guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
+                            val channel = it.asChannel()
+                            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+                            if (!hasPermissions) {
+                                logger.errorF { "missing permissions in channel ${channel.name}" }
+                            }
+                            hasPermissions
                         }
-                        hasPermissions
-                    }
 
                     kord.launch(coroutineContext) {
 //                        withLogContext(event.guild) { guild ->
@@ -424,7 +427,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         val oldMessage = twitchNotificationConfig.message?.let {
             twitchNotificationConfig.channel(guildBehavior).getMessageOrNull(it)
-        } ?: findMessage(twitchNotificationConfig.channel(guildBehavior), userData, webhook)
+        } ?: findMessage(twitchNotificationConfig.channel(guildBehavior), userData, webhook)?.also { foundMessage ->
+            updateMessageId(foundMessage.id)
+        }
         if (streamData != null) {
             // live
             if (oldMessage != null) {
@@ -434,7 +439,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                     // TODO: check title, timestamp and game_name, only edit if different
                     val oldEmbed = oldMessage.embeds.firstOrNull()
-                    val messageContent = "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                    val messageContent =
+                        "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                     val editMessage = when {
                         oldEmbed == null -> true
                         oldMessage.content != messageContent -> true
@@ -463,7 +469,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             val messageId = webhook.execute(webhook.token!!) {
                 username = userData.display_name
                 avatarUrl = userData.profile_image_url
-                content = "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                content =
+                    "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                 embed {
                     buildEmbed(userData, streamData, gameData)
                 }
@@ -512,7 +519,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun findMessage(channel: TextChannel, userData: TwitchUserData, webhook: Webhook): Message? {
-        logger.traceF { "searching for message with author '${userData.display_name}' id: ${webhook.id}" }
+        logger.debugF { "searching for message with author '${userData.display_name}' id: ${webhook.id}" }
         return channel.getMessagesBefore(
             channel.lastMessageId ?: return null,
             100
@@ -772,7 +779,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 array
             )
         } catch (e: SerializationException) {
-            logger.errorF(e) { "twitch data failed to parse: \n${json.encodeToString(JsonElement.serializer(), array)}" }
+            logger.errorF(e) {
+                "twitch data failed to parse: \n${
+                    json.encodeToString(JsonElement.serializer(),
+                        array)
+                }"
+            }
             return emptyList()
         }
     }

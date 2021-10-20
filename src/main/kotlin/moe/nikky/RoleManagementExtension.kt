@@ -3,7 +3,6 @@ package moe.nikky
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.CommandContext
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
@@ -19,25 +18,25 @@ import com.kotlindiscord.kord.extensions.utils.respond
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.Permission
-import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.edit
 import dev.kord.core.entity.Guild
-import dev.kord.core.entity.GuildEmoji
-import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
-import dev.kord.core.firstOrNull
 import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import moe.nikky.checks.hasBotControl
+import moe.nikky.converter.reactionEmoji
 import org.koin.core.component.inject
 import kotlin.time.ExperimentalTime
 
@@ -57,34 +56,14 @@ class RoleManagementExtension : Extension(), Klogging {
 
     inner class AddRoleArg : Arguments() {
         val section by string("section", "Section Title")
-        val reaction by string("emoji", "Reaction Emoji") { arguments, input ->
-            val guild = getGuild()?.asGuildOrNull() ?: relayError("cannot load guild")
-            val reactionEmoji = findEmoji(guild, input, this)
-                ?.let { ReactionEmoji.from(it) }
-                ?: ReactionEmoji.Unicode(input)
-            if(reactionEmoji is ReactionEmoji.Unicode) {
-                if(input.length > 1) {
-                    relayError("invalid input, please only input a single emoji")
-                }
-            }
-        }
+        val reaction by reactionEmoji("emoji", "Reaction Emoji")
         val role by role("role", "Role")
         val channel by optionalChannel("channel", "channel")
     }
 
     inner class RemoveRoleArg : Arguments() {
         val section by string("section", "Section Title")
-        val reaction by string("emoji", "Reaction Emoji") { arguments, input ->
-            val guild = getGuild()?.asGuildOrNull() ?: relayError("cannot load guild")
-            val reactionEmoji = findEmoji(guild, input, this)
-                ?.let { ReactionEmoji.from(it) }
-                ?: ReactionEmoji.Unicode(input)
-            if(reactionEmoji is ReactionEmoji.Unicode) {
-                if(input.length > 1) {
-                    relayError("invalid input, please only input a single emoji")
-                }
-            }
-        }
+        val reaction by reactionEmoji("emoji", "Reaction Emoji")
         val channel by optionalChannel("channel", "channel")
     }
 
@@ -274,7 +253,8 @@ class RoleManagementExtension : Extension(), Klogging {
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
                             val message = rolePickerMessageState.getMessageOrRelayError(guild)
-                                ?: rolePickerMessageState.channel(guild).createMessage("placeholder for section ${section}")
+                                ?: rolePickerMessageState.channel(guild)
+                                    .createMessage("placeholder for section ${section}")
                             message.edit {
                                 content = buildMessage(
                                     guild,
@@ -295,7 +275,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                             member.addRole(role.id)
                                         }
                                 }
-                            } catch(e: KtorRequestException) {
+                            } catch (e: KtorRequestException) {
                                 logger.errorF(e) { "failed to apply missing roles" }
                             }
 
@@ -310,12 +290,15 @@ class RoleManagementExtension : Extension(), Klogging {
                         }
                     }
                 }
-
             }
         }
     }
 
-    private suspend fun CommandContext.add(guild: Guild, arguments: AddRoleArg, currentChannel: ChannelBehavior): String {
+    private suspend fun add(
+        guild: Guild,
+        arguments: AddRoleArg,
+        currentChannel: ChannelBehavior,
+    ): String {
         val guildConfig = config[guild]
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
@@ -323,12 +306,8 @@ class RoleManagementExtension : Extension(), Klogging {
 
         val oldRolePickerMessageConfig = guildConfig.roleChooser[arguments.section]
 
-        logger.info { "reaction: '${arguments.reaction}'" }
-        val reactionEmoji = findEmoji(guild, arguments.reaction, this)
-            ?.let { ReactionEmoji.from(it) }
-            ?: ReactionEmoji.Unicode(arguments.reaction)
-
-        logger.info { "reaction emoji: $reactionEmoji" }
+        logger.infoF { "reaction: '${arguments.reaction}'" }
+        val reactionEmoji = arguments.reaction
 
         val message = oldRolePickerMessageConfig?.getMessageOrRelayError(guild)
             ?: channel.createMessage("placeholder for section ${arguments.section}")
@@ -369,8 +348,11 @@ class RoleManagementExtension : Extension(), Klogging {
         return "added new role mapping ${reactionEmoji.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
     }
 
-
-    private suspend fun CommandContext.remove(guild: Guild, arguments: RemoveRoleArg, currentChannel: ChannelBehavior): String {
+    private suspend fun remove(
+        guild: Guild,
+        arguments: RemoveRoleArg,
+        currentChannel: ChannelBehavior,
+    ): String {
         val kord = this@RoleManagementExtension.kord
         val guildConfig = config[guild]
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
@@ -380,9 +362,8 @@ class RoleManagementExtension : Extension(), Klogging {
         val oldRolePickerMessageState = guildConfig.roleChooser[arguments.section]
             ?: relayError("no roleselection section ${arguments.section}")
 
-        val reactionEmoji = guild.emojis.firstOrNull { it.data.id.asString in arguments.reaction }
-            ?.let { ReactionEmoji.from(it) }
-            ?: ReactionEmoji.Unicode(arguments.reaction)
+        logger.infoF { "reaction: '${arguments.reaction}'" }
+        val reactionEmoji = arguments.reaction
 
         val removedRole = oldRolePickerMessageState.roleMapping[reactionEmoji.mention]?.let { removedRoleId ->
             guild.getRoleOrNull(removedRoleId)
@@ -431,27 +412,6 @@ class RoleManagementExtension : Extension(), Klogging {
         "\n") { (reactionEmoji, role) ->
         "${reactionEmoji.mention} `${role.name}`"
     }
-
-    private suspend fun findEmoji(guild: Guild, arg: String, context: CommandContext): GuildEmoji? =
-        if (arg.startsWith("<a:") || arg.startsWith("<:") && arg.endsWith('>')) { // Emoji mention
-            val id: String = arg.substring(0, arg.length - 1).split(":").last()
-
-            try {
-                guild.getEmojiOrNull(Snowflake(id))
-            } catch (e: NumberFormatException) {
-                throw DiscordRelayedException(
-                    context.translate("converters.emoji.error.invalid", replacements = arrayOf(id))
-                )
-            }
-        } else { // ID or name
-            val name = if (arg.startsWith(":") && arg.endsWith(":")) arg.substring(1, arg.length - 1) else arg
-
-            try {
-                guild.getEmojiOrNull(Snowflake(name))
-            } catch (e: NumberFormatException) {  // Not an ID, let's check names
-                guild.emojis.firstOrNull { emojiObj -> emojiObj.name?.lowercase().equals(name, true) }
-            }
-        }
 
     @OptIn(KordPreview::class)
     private suspend fun startOnReaction(

@@ -21,9 +21,9 @@ suspend fun GuildBehavior.getOrCreateTextChannel(
     name: String,
     category: CategoryBehavior?,
     permissions: List<Overwrite>? = null,
-) = channels.filterIsInstance<TextChannel>().firstOrNull { it.name.equals(name, ignoreCase = true)}
+) = channels.filterIsInstance<TextChannel>().firstOrNull { it.name.equals(name, ignoreCase = true) }
     ?.edit {
-        if(category != null) {
+        if (category != null) {
             parentId = category.id
         }
         if (permissions != null) {
@@ -31,7 +31,7 @@ suspend fun GuildBehavior.getOrCreateTextChannel(
         }
     }
     ?: createTextChannel(name) {
-        if(category != null) {
+        if (category != null) {
             parentId = category.id
         }
         if (permissions != null) {
@@ -43,7 +43,7 @@ suspend fun GuildBehavior.getOrCreateTextChannel(
 suspend fun GuildBehavior.getOrCreateCategory(
     name: String,
     permissions: MutableList<Overwrite>? = null,
-) = channels.filterIsInstance<Category>().firstOrNull { it.name.equals(name, ignoreCase = true)}
+) = channels.filterIsInstance<Category>().firstOrNull { it.name.equals(name, ignoreCase = true) }
     ?.edit {
         if (permissions != null) {
             permissionOverwrites = permissions.toMutableSet()

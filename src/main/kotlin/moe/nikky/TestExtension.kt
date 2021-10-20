@@ -5,24 +5,15 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.converters.C
 import com.kotlindiscord.kord.extensions.commands.application.slash.converters.impl.optionalEnumChoice
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalUser
 import com.kotlindiscord.kord.extensions.commands.converters.impl.user
-import com.kotlindiscord.kord.extensions.extensions.*
+import com.kotlindiscord.kord.extensions.extensions.Extension
+import com.kotlindiscord.kord.extensions.extensions.chatCommand
+import com.kotlindiscord.kord.extensions.extensions.event
+import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.respond
-import com.kotlindiscord.kord.extensions.utils.translate
-import dev.kord.common.annotation.KordPreview
-import dev.kord.common.entity.Permission
-import dev.kord.core.behavior.execute
-import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
-import dev.kord.rest.builder.message.create.embed
 import io.klogging.Klogging
-import io.klogging.context.logContext
-import io.klogging.logger
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.withContext
-import mu.KotlinLogging
-import java.util.*
 
 class TestExtension : Extension(), Klogging {
     override val name: String = "Test extension"

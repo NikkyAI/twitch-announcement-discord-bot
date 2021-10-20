@@ -7,8 +7,6 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
 import io.klogging.Klogging
-import io.klogging.logger
-import mu.KotlinLogging
 
 class DiceExtension() : Extension(), Klogging {
     override val name: String = "Reality switching"

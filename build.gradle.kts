@@ -3,6 +3,7 @@
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
     application
 }
@@ -18,6 +19,7 @@ repositories {
     maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
         name = "klogging"
     }
+//    mavenLocal()
 }
 
 application {
@@ -25,15 +27,21 @@ application {
 }
 
 kotlin {
-    this.target {
-
+    sourceSets.main {
+        kotlin.srcDir("build/generated/ksp/main/kotlin")
     }
-
+    sourceSets.test {
+        kotlin.srcDir("build/generated/ksp/test/kotlin")
+    }
 }
 
 dependencies {
 //    implementation("dev.kord:kord-core:_")
     implementation("com.kotlindiscord.kord.extensions:kord-extensions:_")
+    implementation("com.kotlindiscord.kord.extensions:annotations:_")
+    ksp("com.kotlindiscord.kord.extensions:annotation-processor:_")
+
+    implementation("dev.kord.x:emoji:_")
 
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:_")
 

@@ -36,7 +36,8 @@ suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, loca
     if (!passed) {
         fail(
             "must have permission: **${Permission.Administrator.translate(locale)}**"
-                    + (guildConfig.adminRole(guild)?.let { "\nor role: ** ${it.mention}**" } ?: "\nand no adminrole is configured")
+                    + (guildConfig.adminRole(guild)?.let { "\nor role: ** ${it.mention}**" }
+                ?: "\nand no adminrole is configured")
         )
     }
 }
@@ -63,16 +64,17 @@ suspend fun CheckContext<InteractionCreateEvent>.hasPermissions(vararg permissio
     }
 }
 
-private suspend fun <T: Event> CheckContext<T>.anyCheck(vararg checks: suspend CheckContext<T>.() -> Unit) {
+private suspend fun <T : Event> CheckContext<T>.anyCheck(vararg checks: suspend CheckContext<T>.() -> Unit) {
     anyCheck(checks.toList())
 }
-private suspend fun <T: Event> CheckContext<T>.anyCheck(checks: List<suspend CheckContext<T>.() -> Unit>) {
+
+private suspend fun <T : Event> CheckContext<T>.anyCheck(checks: List<suspend CheckContext<T>.() -> Unit>) {
     if (!passed) {
         return
     }
     val messages = checks.map { check ->
         check()
-        if(passed) return
+        if (passed) return
         passed = true
         message.also {
             message = null
