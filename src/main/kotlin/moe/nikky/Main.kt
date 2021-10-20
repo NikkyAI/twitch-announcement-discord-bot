@@ -69,9 +69,7 @@ suspend fun main() {
         }
         logging {
             fromLoggerBase("moe.nikky", stopOnMatch = true)
-            sinksFromLevel(
-                if(dockerLogging) Level.INFO else Level.DEBUG
-            )
+            sinksFromLevel(Level.DEBUG)
         }
         logging {
             exactLogger("\\Q[R]:[KTOR]:[ExclusionRequestRateLimiter]\\E", stopOnMatch = true)
