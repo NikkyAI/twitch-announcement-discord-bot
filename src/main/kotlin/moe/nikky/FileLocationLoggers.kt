@@ -9,47 +9,50 @@ private val scanStacktrace = true
 
 fun getLocation(debug: Boolean = false): String? {
     if (!scanStacktrace) return null
-    val stackTrace = Thread.currentThread().stackTrace.drop(1)
-    val firstElement = stackTrace.first()
-    return stackTrace.firstOrNull { element ->
-        element.fileName != firstElement.fileName
-                && element.lineNumber > 0
-                && element.className.startsWith("moe.nikky.")
-    }?.let { element ->
-        if (debug) {
-            System.err.println(element)
-            System.err.println(element.fileName)
-            System.err.println(element.lineNumber)
+    return try {
+        throw Exception()
+    } catch (e: Exception) {
+        val firstElement = e.stackTrace.first()
+        e.stackTrace.firstOrNull { element ->
+            element.fileName != firstElement.fileName
+                    && element.lineNumber > 0
+                    && element.className.startsWith("moe.nikky.")
+        }?.let { element ->
+            if (debug) {
+                System.err.println(element)
+                System.err.println(element.fileName)
+                System.err.println(element.lineNumber)
+            }
+            "${element.fileName}:${element.lineNumber}"
+        }.also {
+            if (debug || it == null) e.printStackTrace()
         }
-        "${element.fileName}:${element.lineNumber}"
-    }.also {
-        if (debug || it == null) System.err.println(stackTrace.joinToString("\n  at "))
     }
 }
 
-//suspend inline fun Klogger.infoF(template: String, vararg values: Any?) {
-//    logF(Level.INFO, template, values)
-//}
-//
-//suspend inline fun Klogger.debugF(template: String, vararg values: Any?) {
-//    logF(Level.DEBUG, template, values)
-//}
-//
-//suspend inline fun Klogger.traceF(template: String, vararg values: Any?) {
-//    logF(Level.TRACE, template, values)
-//}
-//
-//suspend fun Klogger.logF(level: Level, template: String, vararg values: Any?) {
-//    if (!isLevelEnabled(level)) return
-//    val location = getLocation()
-//    if (location != null) {
-//        withContext(logContext("file" to location)) {
-//            log(level, template, values)
-//        }
-//    } else {
-//        log(level, template, values)
-//    }
-//}
+suspend inline fun Klogger.infoF(template: String, vararg values: Any?) {
+    logF(Level.INFO, template, values)
+}
+
+suspend inline fun Klogger.debugF(template: String, vararg values: Any?) {
+    logF(Level.DEBUG, template, values)
+}
+
+suspend inline fun Klogger.traceF(template: String, vararg values: Any?) {
+    logF(Level.TRACE, template, values)
+}
+
+suspend fun Klogger.logF(level: Level, template: String, vararg values: Any?) {
+    if (!isLevelEnabled(level)) return
+    val location = getLocation()
+    if (location != null) {
+        withContext(logContext("file" to location)) {
+            log(level, template, values)
+        }
+    } else {
+        log(level, template, values)
+    }
+}
 
 suspend fun Klogger.fatalF(event: suspend Klogger.() -> Any?) {
     logF(Level.FATAL, event)

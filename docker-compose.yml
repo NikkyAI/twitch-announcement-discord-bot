@@ -22,16 +22,6 @@ services:
     ports:
       - "5380:80"
       - "5341:5341"
-  qodana:
-    image: jetbrains/qodana-jvm:latest
-    volumes:
-      - "./:/data/project"
-      - "./build/results:/data/results"
-    ports:
-      - "8089:8080"
-    command:
-      - "-changes"
-      - "--show-report"
 
 volumes:
   seq_data:

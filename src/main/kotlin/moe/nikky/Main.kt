@@ -7,11 +7,13 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
-import dev.kord.core.entity.ReactionEmoji
 import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
-import io.klogging.config.*
+import io.klogging.config.DEFAULT_CONSOLE
+import io.klogging.config.LevelRange
+import io.klogging.config.loggingConfiguration
+import io.klogging.config.seq
 import io.klogging.logger
 import io.klogging.rendering.RENDER_ANSI
 import io.klogging.rendering.RENDER_SIMPLE
@@ -31,6 +33,9 @@ import kotlin.time.measureTime
 private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
 
+@Deprecated("remove")
+val commandPrefix: String = if(TEST_GUILD_ID != null) "" else ""
+
 val dockerLogging = envOrNull("DOCKER_LOGGING") == "true"
 
 @OptIn(ExperimentalTime::class)
@@ -40,15 +45,18 @@ suspend fun main() {
     DebugProbes.install()
     DebugProbes.sanitizeStackTraces = true
 
-    //fixes ktor error with missing random implementation on windows 10
     System.setProperty("io.ktor.random.secure.random.provider", "DRBG")
     Security.setProperty("securerandom.drbg.config", "HMAC_DRBG,SHA-512,256,pr_and_reseed")
 
+
     loggingConfiguration {
-        if(dockerLogging) {
+        val rootLogLevel = if(dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
+            Level.INFO
         } else {
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
+            Level.DEBUG
+            Level.INFO
         }
         sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
@@ -57,38 +65,40 @@ suspend fun main() {
         if(seqServer != null) {
             sink("seq", seq(seqServer))
         }
-        fun LoggingConfig.sinksFromLevel(level: Level) {
-            fromMinLevel(level) {
-                toSink("stdout")
-                if (seqServer != null) {
-                    toSink("seq")
-                }
-                toSink("file_latest")
-                toSink("file")
+        fun LevelRange.applySinks() {
+            toSink("stdout")
+            if(seqServer != null) {
+                toSink("seq")
             }
+            toSink("file_latest")
+            toSink("file")
         }
         logging {
             fromLoggerBase("moe.nikky", stopOnMatch = true)
             sinksFromLevel(Level.DEBUG)
         }
         logging {
-            exactLogger("\\Q[R]:[KTOR]:[ExclusionRequestRateLimiter]\\E", stopOnMatch = true)
-            sinksFromLevel(Level.INFO)
+            fromLoggerBase("dev.kord.rest")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
         }
         logging {
-            fromLoggerBase("dev.kord.rest", stopOnMatch = true)
-            sinksFromLevel(Level.DEBUG)
+            fromLoggerBase("dev.kord")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
         }
         logging {
-            fromLoggerBase("dev.kord", stopOnMatch = true)
-            sinksFromLevel(Level.INFO)
+            fromLoggerBase("com.kotlindiscord.kord.extensions")
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
         }
         logging {
-            fromLoggerBase("com.kotlindiscord.kord.extensions", stopOnMatch = true)
-            sinksFromLevel(Level.INFO)
-        }
-        logging {
-            sinksFromLevel(Level.DEBUG)
+            fromMinLevel(rootLogLevel) {
+                applySinks()
+            }
         }
     }
     val token = env("BOT_TOKEN")
@@ -100,36 +110,13 @@ suspend fun main() {
     }
     logger.infoF { "defaultGuidId: $TEST_GUILD_ID" }
 
-//    listOf(
-//        ReactionEmoji.Unicode("❤🧡💛💙"),
-//        ReactionEmoji.Unicode("❤"),
-//    ).forEach { emoji ->
-//        logger.info { emoji.mention.length }
-//        logger.info { emoji.mention }
-//        logger.info { emoji.urlFormat }
-//    }
-
-//    val baseline = measureTime {
-//        for (i in 0..1000) {
-//            logger.info { "test $i" }
-//        }
-//    }
-//    val duration = measureTime {
-//        for (i in 0..1000) {
-//            logger.infoF { "test $i" }
-//        }
-//    }
-//    logger.warn { "base: $baseline, duration: $duration" }
-//    logger.warn { "difference: ${duration-baseline}" }
-
     val bot = ExtensibleBot(token) {
 //        intents {
 //            +Intent.GuildWebhooks
 //        }
 
         chatCommands {
-            defaultPrefix = (envOrNull("COMMAND_PREFIX") ?: ";")
-            logger.info { "defaultPrefix: $defaultPrefix" }
+            defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
             enabled = true
         }
         i18n {
