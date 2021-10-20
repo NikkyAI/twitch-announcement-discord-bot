@@ -52,6 +52,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
 import org.koin.core.component.inject
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
@@ -126,7 +127,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         val responseMessage = add(
                             guild,
                             arguments,
-                            event.message.channel
+                            event.message.channel,
+                            coroutineContext,
                         )
 
                         val response = event.message.respond {
@@ -157,7 +159,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         val responseMessage = remove(
                             guild,
                             arguments,
-                            event.message.channel
+                            event.message.channel,
                         )
 
                         val response = event.message.respond {
@@ -195,7 +197,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         val responseMessage = add(
                             guild,
                             arguments,
-                            event.interaction.channel
+                            event.interaction.channel,
+                            coroutineContext,
                         )
 
                         respond {
@@ -222,7 +225,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         val responseMessage = remove(
                             guild,
                             arguments,
-                            event.interaction.channel
+                            event.interaction.channel,
                         )
 
                         respond {
@@ -291,31 +294,31 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val guildConfig = config[event.guild]
-                    val validChannels =
-                        guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
-                            val channel = it.asChannel()
-                            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-                            if (!hasPermissions) {
-                                logger.errorF { "missing permissions in channel ${channel.name}" }
-                            }
-                            hasPermissions
-                        }
-
-                    kord.launch(coroutineContext) {
-//                        withLogContext(event.guild) { guild ->
-                        while (true) {
-                            delay(15_000)
-                            checkStreams(guild, validChannels)
-                        }
-//                        }
-                    }
+                    launchBackgroundJob(guild, coroutineContext)
                 }
             }
         }
     }
 
-    private suspend fun add(guild: Guild, arguments: TwitchAddArgs, currentChannel: ChannelBehavior): String {
+    suspend fun launchBackgroundJob(guild: Guild, coroutineContext: CoroutineContext) {
+        val guildConfig = config[guild]
+        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
+            val channel = it.asChannel()
+            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+            if (!hasPermissions) {
+                logger.errorF { "missing permissions in channel ${channel.name}" }
+            }
+            hasPermissions
+        }
+        guildConfig.twitchJob = kord.launch(coroutineContext) {
+            while (true) {
+                delay(15_000)
+                checkStreams(guild, validChannels)
+            }
+        }
+    }
+
+    private suspend fun add(guild: Guild, arguments: TwitchAddArgs, currentChannel: ChannelBehavior, coroutineContext: CoroutineContext): String {
         val guildConfig = config[guild]
 
         val channelInput = arguments.channel ?: currentChannel
@@ -346,6 +349,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             )
         )
         config.save()
+
+        guildConfig.twitchJob.let {
+            launchBackgroundJob(guild, coroutineContext)
+            it?.cancel()
+        }
 
         return "added ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
     }

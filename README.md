@@ -1,4 +1,10 @@
 # twitch notifications discord bot
+
+[![Discord](https://img.shields.io/discord/342696338556977153.svg?style=for-the-badge&logo=discord)](https://discord.gg/dQA3rYsYS8)
+[![GitHub issues](https://img.shields.io/github/issues/NikkyAi/discordbot.svg?style=for-the-badge&logo=github)](https://github.com/NikkyAi/discordbot/issues)
+[![GitHub issues](https://img.shields.io/github/issues/NikkyAi/discordbot.svg?style=for-the-badge&logo=github)](https://github.com/NikkyAi/discordbot/issues)
+![Docker Image Version (latest by date)](https://img.shields.io/docker/v/nikkyai/discordbot?style=for-the-badge)
+
 ## twitch notifications
 
 the bot will not automatically get webhook management permissions because the usual setup for notification channels is to disallow `@everyone` from everything but seeing the channel
