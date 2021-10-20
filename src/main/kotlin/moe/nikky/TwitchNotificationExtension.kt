@@ -21,9 +21,11 @@ import dev.kord.core.behavior.channel.createWebhook
 import dev.kord.core.behavior.execute
 import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Guild
+import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.gateway.Intent
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
@@ -37,6 +39,7 @@ import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -118,7 +121,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 )
                 action {
                     withLogContext(event, guild) { guild ->
-                        val responseMessage =  add(
+                        val responseMessage = add(
                             guild,
                             arguments,
                             event.message.channel
@@ -398,7 +401,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         guildBehavior: GuildBehavior,
         twitchNotificationConfig: TwitchNotificationConfig,
         token: Token,
-        usersData: TwitchUserData,
+        userData: TwitchUserData,
         channelInfo: TwitchChannelInfo,
         streamData: StreamData?,
         gameData: TwitchGameData?,
@@ -419,7 +422,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             config.save()
         }
 
-        val oldMessage = twitchNotificationConfig.message?.let { twitchNotificationConfig.channel(guildBehavior).getMessageOrNull(it) }
+        val oldMessage = twitchNotificationConfig.message?.let {
+            twitchNotificationConfig.channel(guildBehavior).getMessageOrNull(it)
+        } ?: findMessage(twitchNotificationConfig.channel(guildBehavior), userData, webhook)
         if (streamData != null) {
             // live
             if (oldMessage != null) {
@@ -429,7 +434,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                     // TODO: check title, timestamp and game_name, only edit if different
                     val oldEmbed = oldMessage.embeds.firstOrNull()
-                    val messageContent = "<https://twitch.tv/${usersData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                    val messageContent = "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                     val editMessage = when {
                         oldEmbed == null -> true
                         oldMessage.content != messageContent -> true
@@ -446,7 +451,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         ) {
                             content = messageContent
                             embed {
-                                buildEmbed(usersData, streamData, gameData)
+                                buildEmbed(userData, streamData, gameData)
                             }
                         }.id
                         updateMessageId(messageId)
@@ -456,11 +461,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
             // was offline, creating new message and deleting old message
             val messageId = webhook.execute(webhook.token!!) {
-                username = usersData.display_name
-                avatarUrl = usersData.profile_image_url
-                content = "<https://twitch.tv/${usersData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                username = userData.display_name
+                avatarUrl = userData.profile_image_url
+                content = "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
                 embed {
-                    buildEmbed(usersData, streamData, gameData)
+                    buildEmbed(userData, streamData, gameData)
                 }
             }.id
             updateMessageId(messageId)
@@ -478,8 +483,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
 
             if (updateMessage) {
-                val vod = httpClient.getLastVOD(token, usersData.id)
-                val message = "<https://twitch.tv/${usersData.login}>\n" +
+                val vod = httpClient.getLastVOD(token, userData.id)
+                val message = "<https://twitch.tv/${userData.login}>\n" +
                         if (vod != null) {
                             """
                             <${vod.url}>
@@ -494,8 +499,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     }.id
                 } else {
                     webhook.execute(webhook.token!!) {
-                        username = usersData.display_name
-                        avatarUrl = usersData.profile_image_url
+                        username = userData.display_name
+                        avatarUrl = userData.profile_image_url
                         content = message
                     }.id
                 }
@@ -504,6 +509,17 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         }
 
+    }
+
+    private suspend fun findMessage(channel: TextChannel, userData: TwitchUserData, webhook: Webhook): Message? {
+        logger.traceF { "searching for message with author '${userData.display_name}' id: ${webhook.id}" }
+        return channel.getMessagesBefore(
+            channel.lastMessageId ?: return null,
+            100
+        ).filter { message ->
+            val author = message.data.author
+            author.id == webhook.id && author.username == userData.display_name
+        }.firstOrNull()
     }
 
     private fun EmbedBuilder.buildEmbed(
