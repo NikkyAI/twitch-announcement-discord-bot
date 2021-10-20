@@ -291,6 +291,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                         .filter { member ->
                                             role.id !in member.roleIds
                                         }.collect { member ->
+                                            logger.info { "adding '${role.name}' to '${member.displayName}'" }
                                             member.addRole(role.id)
                                         }
                                 }
