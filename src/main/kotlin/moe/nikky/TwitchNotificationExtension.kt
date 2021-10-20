@@ -47,6 +47,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
 import org.koin.core.component.inject
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
@@ -57,6 +59,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
+
+    private val backgroundJobs = mutableMapOf<Snowflake, Job>()
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
@@ -100,80 +104,81 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     override suspend fun setup() {
+        chatGroupCommand {
+            name = "twitch"
+            description = "be notified about more streamers"
+
+            chatCommand(::TwitchAddArgs) {
+                name = "add"
+                description = "be notified about more streamers"
+                locking = true
+
+                check {
+                    hasBotControl(config, event.getLocale())
+                }
+
+                requireBotPermissions(
+                    *requiredPermissions
+                )
+                action {
+                    val logger = this@TwitchNotificationExtension.logger
+                    val kord = this@TwitchNotificationExtension.kord
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage = add(
+                            guild,
+                            arguments,
+                            event.message.channel
+                        )
+
+                        val response = event.message.respond {
+                            content = responseMessage
+                        }
+                        event.message.delete()
+                        launch {
+                            delay(30_000)
+                            response.delete()
+                        }
+                    }
+                }
+            }
+            chatCommand(::TwitchRemoveArgs) {
+                name = "remove"
+                description = "removes a streamer from notifications"
+
+                check {
+                    hasBotControl(config, event.getLocale())
+                }
+
+                requireBotPermissions(
+                    Permission.ManageMessages
+                )
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage = remove(
+                            guild,
+                            arguments,
+                            event.message.channel
+                        )
+
+                        val response = event.message.respond {
+                            content = responseMessage
+                        }
+                        event.message.delete()
+                        launch {
+                            delay(30_000)
+                            response.delete()
+                        }
+                    }
+                }
+            }
+        }
+
         ephemeralSlashCommand {
             name = "twitch"
             description = "twitch notifications"
 
-            chatGroupCommand {
-                name = "twitch"
-                description = "be notified about more streamers"
 
-                chatCommand(::TwitchAddArgs) {
-                    name = "add"
-                    description = "be notified about more streamers"
-                    locking = true
-
-                    check {
-                        hasBotControl(config, event.getLocale())
-                    }
-
-                    requireBotPermissions(
-                        *requiredPermissions
-                    )
-                    action {
-                        val logger = this@TwitchNotificationExtension.logger
-                        val kord = this@TwitchNotificationExtension.kord
-                        withLogContext(event, guild) { guild ->
-                            val responseMessage =  add(
-                                guild,
-                                arguments,
-                                event.message.channel
-                            )
-
-                            val response = event.message.respond {
-                                content = responseMessage
-                            }
-                            event.message.delete()
-                            launch {
-                                delay(30_000)
-                                response.delete()
-                            }
-                        }
-                    }
-                }
-                chatCommand(::TwitchRemoveArgs) {
-                    name = "remove"
-                    description = "removes a streamer from notifications"
-
-                    check {
-                        hasBotControl(config, event.getLocale())
-                    }
-
-                    requireBotPermissions(
-                        Permission.ManageMessages
-                    )
-
-                    action {
-                        withLogContext(event, guild) { guild ->
-                            val responseMessage = remove(
-                                guild,
-                                arguments,
-                                event.message.channel
-                            )
-
-                            val response = event.message.respond {
-                                content = responseMessage
-                            }
-                            event.message.delete()
-                            launch {
-                                delay(30_000)
-                                response.delete()
-                            }
-                        }
-                    }
-
-                }
-            }
             ephemeralSubCommand(::TwitchAddArgs) {
                 name = "add"
                 description = "be notified about more streamers"
@@ -188,10 +193,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 )
 
                 action {
-                    val logger = this@TwitchNotificationExtension.logger
-                    val kord = this@TwitchNotificationExtension.kord
                     withLogContext(event, guild) { guild ->
-                        val responseMessage =  add(
+                        val responseMessage = add(
                             guild,
                             arguments,
                             event.interaction.channel
@@ -218,7 +221,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-
                         val responseMessage = remove(
                             guild,
                             arguments,
@@ -292,24 +294,28 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext
                     }
-                    val validChannels = state.twitchNotifications.map { it.value.channel }.distinct().filter {
-                        val channel = it.asChannel()
-                        val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-                        if (!hasPermissions) {
-                            logger.errorF { "missing permissions in channel ${channel.name}" }
-                        }
-                        hasPermissions
-                    }
 
-                    kord.launch(coroutineContext) {
-//                        withLogContext(event.guild) { guild ->
-                        while (true) {
-                            delay(15_000)
-                            checkStreams(guild, validChannels)
-                        }
-//                        }
-                    }
+                    startBackgroundJob(state, guild, coroutineContext)
                 }
+            }
+        }
+    }
+
+    private suspend fun startBackgroundJob(state: BotState, guild: Guild, coroutineContext: CoroutineContext) {
+        val validChannels = state.twitchNotifications.map { it.value.channel }.distinct().filter {
+            val channel = it.asChannel()
+            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+            if (!hasPermissions) {
+                logger.errorF { "missing permissions in channel ${channel.name}" }
+            }
+            hasPermissions
+        }
+
+        backgroundJobs[guild.id]?.cancel()
+        backgroundJobs[guild.id] = kord.launch(coroutineContext) {
+            while (true) {
+                delay(15_000)
+                checkStreams(guild, validChannels)
             }
         }
     }
@@ -344,6 +350,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             )
         )
         config.save()
+
+        if (backgroundJobs[guild.id]?.isActive != true) {
+            startBackgroundJob(state, guild, coroutineContext)
+        }
 
         return "added ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
     }
@@ -759,7 +769,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 array
             )
         } catch (e: SerializationException) {
-            logger.errorF(e) { "twitch data failed to parse: \n${json.encodeToString(JsonElement.serializer(), array)}" }
+            logger.errorF(e) {
+                "twitch data failed to parse: \n${
+                    json.encodeToString(JsonElement.serializer(),
+                        array)
+                }"
+            }
             return emptyList()
         }
     }

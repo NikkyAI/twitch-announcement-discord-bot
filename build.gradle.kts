@@ -4,16 +4,27 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("com.github.johnrengelman.shadow")
+    id("org.jetbrains.qodana")
     application
 }
 
 group = "moe.nikky"
 version = "1.0-SNAPSHOT"
 
+qodana {
+    dockerImageName.set("jetbrains/qodana-jvm:latest")
+    saveReport.set(true)
+    showReport.set(true)
+    showReportPort.set(8089)
+}
+
 repositories {
     mavenCentral()
     maven(url = "https://maven.kotlindiscord.com/repository/maven-public/") {
         name = "kotlindiscord"
+    }
+    maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
+        name = "klogging-snapshot"
     }
 }
 
@@ -43,7 +54,7 @@ dependencies {
 
     implementation(Square.okio)
 
-    implementation("io.github.microutils:kotlin-logging:_")
+//    implementation("io.github.microutils:kotlin-logging:_")
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")
