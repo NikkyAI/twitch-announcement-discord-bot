@@ -76,7 +76,7 @@ suspend fun main() {
             }
         }
         logging {
-            exactLogger("\\Q[R]:[KTOR]:[ExclusionRequestRateLimiter]\\E", stopOnMatch = true)
+            exactLogger("[R]:[KTOR]:[ExclusionRequestRateLimiter]", stopOnMatch = true)
             fromMinLevel(Level.INFO) {
                 applySinks()
             }

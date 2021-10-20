@@ -20,9 +20,6 @@ data class GuildConfiguration(
     val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),
 ) : Klogging {
-    @Transient
-    var twitchJob: Job? = null
-
     suspend fun adminRole(guildBehavior: GuildBehavior): Role? {
         return adminRole?.let { guildBehavior.getRoleOrNull(it) }
     }

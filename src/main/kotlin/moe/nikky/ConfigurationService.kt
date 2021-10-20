@@ -124,7 +124,7 @@ class ConfigurationService : KoinComponent, Klogging {
     }
 
     suspend fun save() {
-        logger.debugF { "saving" }
+        logger.infoF { "saving to ${configFile.absolutePath}" }
         val serialized = try {
             json.encodeToString(
                 versionedSerializer,
@@ -134,9 +134,8 @@ class ConfigurationService : KoinComponent, Klogging {
             e.printStackTrace()
             e.stackTraceToString()
         }
-        logger.infoF { "saving to ${configFile.absolutePath}" }
         configFile.absoluteFile.parentFile.mkdirs()
-        if (!configFile.exists()) configFile.createNewFile()
+//        if (!configFile.exists()) configFile.createNewFile()
         configFile.writeText(serialized)
     }
 

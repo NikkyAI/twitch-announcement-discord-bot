@@ -1,5 +1,6 @@
 package moe.nikky
 
+import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
@@ -10,7 +11,10 @@ import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.*
+import com.kotlindiscord.kord.extensions.utils.envOrNull
+import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.getLocale
+import com.kotlindiscord.kord.extensions.utils.respond
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
@@ -24,7 +28,7 @@ import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
 import dev.kord.core.entity.channel.TextChannel
-import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.core.event.gateway.ReadyEvent
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
@@ -37,12 +41,10 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
@@ -63,6 +65,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
+    private var backgroundJob: Job? = null
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
@@ -128,7 +131,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             guild,
                             arguments,
                             event.message.channel,
-                            coroutineContext,
                         )
 
                         val response = event.message.respond {
@@ -198,7 +200,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             guild,
                             arguments,
                             event.interaction.channel,
-                            coroutineContext,
                         )
 
                         respond {
@@ -291,34 +292,36 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         }
 
-        event<GuildCreateEvent> {
+        event<ReadyEvent> {
             action {
-                withLogContext(event, event.guild) { guild ->
-                    launchBackgroundJob(guild, coroutineContext)
+                withContext(
+                    logContext(
+                        "event" to event::class.simpleName,
+                        "extension" to name
+                    )
+                ) {
+                    logger.infoF { "launching twitch background job" }
+                    backgroundJob = kord.launch(coroutineContext) {
+                        while (true) {
+                            delay(15_000)
+                            kord.guilds.toList().chunked(10).forEach { chunk ->
+                                checkStreams(chunk)
+                            }
+//                            kord.guilds.collect { guild ->
+//                                checkStreams(guild)
+//                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    suspend fun launchBackgroundJob(guild: Guild, coroutineContext: CoroutineContext) {
-        val guildConfig = config[guild]
-        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
-            val channel = it.asChannel()
-            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-            if (!hasPermissions) {
-                logger.errorF { "missing permissions in channel ${channel.name}" }
-            }
-            hasPermissions
-        }
-        guildConfig.twitchJob = kord.launch(coroutineContext) {
-            while (true) {
-                delay(15_000)
-                checkStreams(guild, validChannels)
-            }
-        }
-    }
-
-    private suspend fun add(guild: Guild, arguments: TwitchAddArgs, currentChannel: ChannelBehavior, coroutineContext: CoroutineContext): String {
+    private suspend fun add(
+        guild: Guild,
+        arguments: TwitchAddArgs,
+        currentChannel: ChannelBehavior,
+    ): String {
         val guildConfig = config[guild]
 
         val channelInput = arguments.channel ?: currentChannel
@@ -349,11 +352,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             )
         )
         config.save()
-
-        guildConfig.twitchJob.let {
-            launchBackgroundJob(guild, coroutineContext)
-            it?.cancel()
-        }
 
         return "added ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
     }
@@ -593,22 +591,119 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
-    private suspend fun checkStreams(guild: Guild, validChannels: List<TextChannelBehavior>) = coroutineScope {
+    private suspend fun checkStreams(guilds: List<Guild>) = coroutineScope {
+        val guildConfigs = guilds.mapNotNull { guild ->
+            config[guild].takeIf { it.twitchNotifications.isNotEmpty() }?.let {
+                guild to it
+            }
+        }.toMap()
+
+        logger.traceF { "checking twitch status" }
+
+        // check required permission in channels
+//        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
+//            val channel = it.asChannel()
+//            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+//            if (!hasPermissions) {
+//                logger.errorF { "missing permissions in channel ${channel.name}" }
+//            }
+//            hasPermissions
+//        }
+        val validChannels = guildConfigs.keys.flatMap { guild ->
+            val guildConfig = guildConfigs.getValue(guild)
+            guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct()
+        }
+
+        val webhooks = validChannels.mapNotNull { channel ->
+            withContext(logContext("channel" to channel.asChannel().name)) {
+                getWebhook(channel)
+            }
+        }.associateBy { it.channel.id }
+
+
+        val token = httpClient.getToken() ?: return@coroutineScope
+        val streamDataMap = httpClient.getStreams(
+            token,
+            guildConfigs.values.flatMap { guildConfig ->
+                guildConfig.twitchNotifications.values.map(TwitchNotificationConfig::twitchUserName)
+            }.distinct()
+        ) ?: return@coroutineScope
+        val userDataMap = httpClient.getUsers(
+            token,
+            guildConfigs.values.flatMap { guildConfig ->
+                guildConfig.twitchNotifications.values.map(TwitchNotificationConfig::twitchUserName)
+            }.distinct()
+        ) ?: return@coroutineScope
+        val gameDataMap = httpClient.getGames(
+            token,
+            streamDataMap.values.map { it.game_name }
+        ) ?: return@coroutineScope
+        val channelInfoMap = httpClient.getChannelInfo(
+            token,
+            userDataMap.values.map { it.id }
+        ) ?: return@coroutineScope
+
+        if (streamDataMap.isNotEmpty()) {
+            val userName = streamDataMap.values.random().user_name
+            kord.editPresence {
+                status = PresenceStatus.Online
+                watching(userName)
+            }
+        } else {
+            kord.editPresence {
+                status = PresenceStatus.Idle
+                afk = true
+            }
+        }
+
+        guildConfigs.forEach { (guild, guildConfig) ->
+            launch() {
+                withContext(
+                    logContext(
+                        "guild" to guild.name
+                    )
+                ) {
+                    try {
+                        checkTwitchStreamers(
+                            guild,
+                            guildConfig,
+                            token,
+                            userDataMap,
+                            streamDataMap,
+                            gameDataMap,
+                            channelInfoMap,
+                            webhooks
+                        )
+                    } catch (e: DiscordRelayedException) {
+                        logger.errorF { e.cause }
+                    } catch (e: Exception) {
+                        logger.errorF { e.message }
+                    }
+                }
+
+            }
+        }
+    }
+
+    private suspend fun checkStreams(guild: Guild) = coroutineScope {
         val guildConfig = config[guild]
         if (guildConfig.twitchNotifications.isEmpty()) return@coroutineScope
 
         logger.traceF { "checking twitch status" }
 
-        //TODO: check required permission in channels
-        guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().forEach {
-            val channel = it.asChannel()
-            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-            if (!hasPermissions) {
-                logger.errorF { "missing permissions in channel ${channel.name}" }
-            }
-        }
+        // check required permission in channels
+//        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
+//            val channel = it.asChannel()
+//            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
+//            if (!hasPermissions) {
+//                logger.errorF { "missing permissions in channel ${channel.name}" }
+//            }
+//            hasPermissions
+//        }
+        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct()
 
-        val filteredNotifications = guildConfig.twitchNotifications.filter { it.value.channel(guild) in validChannels }
+        val filteredNotifications =
+            guildConfig.twitchNotifications //.filter { it.value.channel(guild) in validChannels }
 
         val webhooks = validChannels.mapNotNull { channel ->
             withContext(logContext("channel" to channel.asChannel().name)) {
@@ -819,7 +914,7 @@ private data class StreamData(
     val started_at: Instant,
     val language: String,
     val thumbnail_url: String,
-    val tag_ids: List<String>,
+    val tag_ids: List<String>?,
     val is_mature: Boolean,
 )
 
