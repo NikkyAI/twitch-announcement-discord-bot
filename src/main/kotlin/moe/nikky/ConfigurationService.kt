@@ -86,31 +86,12 @@ class ConfigurationService : KoinComponent, Klogging {
         }
     }
 
-    suspend fun loadConfig(guild: GuildBehavior?): GuildConfiguration? {
-        for (i in (0..10)) {
-            delay(200)
-            logger.infoF { "trying to load config" }
-            val guildConfig = getNullable(guild?.id) ?: continue
-            logger.infoF { "loaded config" }
-            return guildConfig
-        }
-        return null
-    }
-
-    private suspend fun getNullable(guildId: Snowflake?): GuildConfiguration? {
-        if (guildId == null) return null
-        return configurations[guildId.asString] ?: run {
-            logger.errorF { "no state stored for guild $guildId" }
-            null
-        }
-    }
-
     operator fun get(guild: GuildBehavior?): GuildConfiguration {
-        return runBlocking {
-            getNullable(guild?.id) ?: relayError("error fetching configuration state")
+        if(guild == null) {
+            relayError("guild was null")
         }
+        return configurations[guild.id.asString] ?: GuildConfiguration()
     }
-
 
     operator fun set(guildId: Snowflake?, value: GuildConfiguration?) {
         if (value != null && guildId != null) {
@@ -129,10 +110,8 @@ class ConfigurationService : KoinComponent, Klogging {
     private suspend fun load() {
         logger.infoF { "loading from ${configFile.absolutePath}" }
         configFile.absoluteFile.parentFile.mkdirs()
-        val newConfigurations  = if (!configFile.exists()) {
-            mutableMapOf()
-        } else {
-            try {
+        if (configFile.exists()) {
+            val newConfigurations = try {
                 json.decodeFromString(
                     versionedSerializer,
                     configFile.readText()
@@ -141,8 +120,8 @@ class ConfigurationService : KoinComponent, Klogging {
                 e.printStackTrace()
                 throw e
             }
+            configurations += newConfigurations
         }
-        configurations += newConfigurations
     }
 
     suspend fun save() {

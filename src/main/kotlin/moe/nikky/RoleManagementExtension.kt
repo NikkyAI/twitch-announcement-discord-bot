@@ -33,6 +33,7 @@ import dev.kord.core.firstOrNull
 import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
+import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -248,7 +249,7 @@ class RoleManagementExtension : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val guildConfig = config.loadConfig(event.guild) ?: run {
+                    val guildConfig = config[event.guild] ?: run {
                         logger.fatalF { "failed to load state for '${event.guild.name}'" }
                         return@withLogContext
                     }
@@ -281,16 +282,22 @@ class RoleManagementExtension : Extension(), Klogging {
                                     rolePickerMessageState
                                 )
                             }
-                            rolePickerMessageState.roleMapping(guild).forEach { (emoji, role) ->
-                                val reactors = message.getReactors(emoji)
-                                reactors.map { it.asMemberOrNull(guild.id) }
-                                    .filterNotNull()
-                                    .filter { member ->
-                                        role.id !in member.roleIds
-                                    }.collect { member ->
-                                        member.addRole(role.id)
-                                    }
+
+                            try {
+                                rolePickerMessageState.roleMapping(guild).forEach { (emoji, role) ->
+                                    val reactors = message.getReactors(emoji)
+                                    reactors.map { it.asMemberOrNull(guild.id) }
+                                        .filterNotNull()
+                                        .filter { member ->
+                                            role.id !in member.roleIds
+                                        }.collect { member ->
+                                            member.addRole(role.id)
+                                        }
+                                }
+                            } catch(e: KtorRequestException) {
+                                logger.errorF(e) { "failed to apply missing roles" }
                             }
+
                             startOnReaction(
                                 guild,
                                 message,

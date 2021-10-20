@@ -286,10 +286,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val guildConfig = config.loadConfig(event.guild) ?: run {
-                        logger.fatalF { "failed to load state for '${event.guild.name}'" }
-                        return@withLogContext
-                    }
+                    val guildConfig = config[event.guild]
                     val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
                         val channel = it.asChannel()
                         val hasPermissions = channel.botHasPermissions(*requiredPermissions)
