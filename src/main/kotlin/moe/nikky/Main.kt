@@ -50,13 +50,10 @@ suspend fun main() {
 
 
     loggingConfiguration {
-        val rootLogLevel = if(dockerLogging) {
+        if(dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
-            Level.INFO
         } else {
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
-            Level.DEBUG
-            Level.INFO
         }
         sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
@@ -74,25 +71,31 @@ suspend fun main() {
             toSink("file")
         }
         logging {
-            fromLoggerBase("moe.nikky")
+            fromLoggerBase("moe.nikky", stopOnMatch = true)
             fromMinLevel(Level.DEBUG) {
                 applySinks()
             }
         }
         logging {
-            fromLoggerBase("dev.kord.rest")
+            fromLoggerBase("dev.kord.rest", stopOnMatch = true)
             fromMinLevel(Level.INFO) {
                 applySinks()
             }
         }
         logging {
-            fromLoggerBase("dev.kord")
+            exactLogger("\\Q[R]:[KTOR]:[ExclusionRequestRateLimiter]\\E", stopOnMatch = true)
             fromMinLevel(Level.INFO) {
                 applySinks()
             }
         }
         logging {
-            fromLoggerBase("com.kotlindiscord.kord.extensions")
+            fromLoggerBase("dev.kord", stopOnMatch = true)
+            fromMinLevel(Level.INFO) {
+                applySinks()
+            }
+        }
+        logging {
+            fromLoggerBase("com.kotlindiscord.kord.extensions", stopOnMatch = true)
             fromMinLevel(Level.INFO) {
                 applySinks()
             }
@@ -110,7 +113,6 @@ suspend fun main() {
         logger.errorF { "ERROR" }
         logger.fatalF { "FATAL" }
     }
-    logger.infoF { "defaultGuidId: $TEST_GUILD_ID" }
 
     val bot = ExtensibleBot(token) {
 //        intents {
@@ -119,7 +121,7 @@ suspend fun main() {
 
         chatCommands {
             defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
-            logger.info { "default prefix: $defaultPrefix" }
+            logger.info { "chat command default prefix: $defaultPrefix" }
             enabled = true
         }
         i18n {
@@ -127,6 +129,7 @@ suspend fun main() {
         }
         applicationCommands {
             defaultGuild = TEST_GUILD_ID
+            logger.infoF { "test guild: ${defaultGuild?.asString}" }
         }
         extensions {
             add(::ConfigurationExtension)

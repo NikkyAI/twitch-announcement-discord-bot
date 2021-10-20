@@ -6,6 +6,7 @@ import dev.kord.core.behavior.GuildBehavior
 import io.klogging.Klogging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -22,8 +23,10 @@ class ConfigurationService : KoinComponent, Klogging {
     private val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
     private val configFile = configFolder.resolve("config.json")
 
+    @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
         prettyPrint = true
+        prettyPrintIndent = "  "
         encodeDefaults = true
     }
 

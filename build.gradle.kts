@@ -15,6 +15,9 @@ repositories {
     maven(url = "https://maven.kotlindiscord.com/repository/maven-public/") {
         name = "kotlindiscord"
     }
+    maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
+        name = "klogging"
+    }
 }
 
 application {
@@ -42,8 +45,6 @@ dependencies {
     implementation("br.com.colman:dice-helper:_")
 
     implementation(Square.okio)
-
-    implementation("io.github.microutils:kotlin-logging:_")
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")
