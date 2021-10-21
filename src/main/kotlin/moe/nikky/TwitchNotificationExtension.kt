@@ -413,7 +413,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
 
     private suspend fun updateTwitchNotificationMessage(
-        guildBehavior: GuildBehavior,
+        guild: Guild,
         twitchNotificationConfig: TwitchNotificationConfig,
         token: Token,
         userData: TwitchUserData,
@@ -423,7 +423,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         webhook: Webhook,
     ) {
         suspend fun updateMessageId(messageId: Snowflake) {
-            config[guildBehavior] = config[guildBehavior].let { state ->
+            config[guild] = config[guild].let { state ->
                 val key = twitchNotificationConfig.twitchUserName + "_" + twitchNotificationConfig.channel.asString
                 val twitchNotificationState = state.twitchNotifications[key]!!
 
@@ -438,8 +438,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 
         val oldMessage = twitchNotificationConfig.message?.let {
-            twitchNotificationConfig.channel(guildBehavior).getMessageOrNull(it)
-        } ?: findMessage(twitchNotificationConfig.channel(guildBehavior), userData, webhook)?.also { foundMessage ->
+            twitchNotificationConfig.channel(guild).getMessageOrNull(it)
+        } ?: findMessage(twitchNotificationConfig.channel(guild), userData, webhook)?.also { foundMessage ->
             updateMessageId(foundMessage.id)
         }
         if (streamData != null) {
@@ -452,7 +452,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     // TODO: check title, timestamp and game_name, only edit if different
                     val oldEmbed = oldMessage.embeds.firstOrNull()
                     val messageContent =
-                        "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                        "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guild).mention}"
                     val editMessage = when {
                         oldEmbed == null -> true
                         oldMessage.content != messageContent -> true
@@ -482,7 +482,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 username = userData.display_name
                 avatarUrl = userData.profile_image_url
                 content =
-                    "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guildBehavior).mention}"
+                    "<https://twitch.tv/${userData.login}> \n ${twitchNotificationConfig.role(guild).mention}"
                 embed {
                     buildEmbed(userData, streamData, gameData)
                 }
@@ -510,10 +510,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             **${vod.title}**
                             ${channelInfo.game_name}
                             """.trimIndent()
-                        } else
+                        } else {
                             """
-                            last played: **${channelInfo.game_name}**
+                            _VOD url not available_
+                            **${channelInfo.title}**
+                            ${channelInfo.game_name}
                             """.trimIndent()
+                        }
                 val messageId = if (oldMessage != null) {
                     kord.rest.webhook.editWebhookMessage(webhook.id, webhook.token!!, oldMessage.id) {
                         content = message

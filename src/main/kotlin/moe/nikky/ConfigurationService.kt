@@ -3,6 +3,7 @@ package moe.nikky
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
+import dev.kord.core.entity.Guild
 import io.klogging.Klogging
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -17,6 +18,7 @@ import moe.nikky.json.VersionMigrator
 import moe.nikky.json.VersionedSerializer
 import org.koin.core.component.KoinComponent
 import java.io.File
+import java.util.*
 
 class ConfigurationService : KoinComponent, Klogging {
     private val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
@@ -29,8 +31,7 @@ class ConfigurationService : KoinComponent, Klogging {
         encodeDefaults = true
     }
 
-    private val configurations: MutableMap<String, GuildConfiguration> = mutableMapOf()
-//    private var configurations: MutableMap<String, ConfigurationStateSerialized> = mutableMapOf()
+    private val configurations: MutableMap<String, GuildConfiguration> = Collections.synchronizedMap(mutableMapOf())
 
     private fun <K, V> Map<K, V>.replaceKey(oldKey: K, newKey: K, transform: (V) -> V = { it }): Map<K, V> =
         this - oldKey + (newKey to transform(getValue(oldKey)))
@@ -53,10 +54,8 @@ class ConfigurationService : KoinComponent, Klogging {
                 new = JsonObject.serializer()
             ) { obj: JsonObject ->
                 obj.mapValues { (_, guildObj) ->
-                    guildObj.jsonObject.replaceValue(
-                        "twitchNotifications"
-                    ) { twitchNotificationsObj ->
-                        twitchNotificationsObj.jsonObject.mapValues { (key, entry) ->
+                    guildObj.jsonObject.replaceValue("twitchNotifications") { twitchNotificationsObj ->
+                        twitchNotificationsObj.jsonObject.mapValues { (_, entry) ->
                             entry.jsonObject.replaceKey("oldMessage", "message").toJsonObject()
                         }.toJsonObject()
                     }.toJsonObject()
@@ -85,15 +84,12 @@ class ConfigurationService : KoinComponent, Klogging {
         }
     }
 
-    operator fun get(guild: GuildBehavior?): GuildConfiguration {
-        if (guild == null) {
-            relayError("guild was null")
-        }
-        return configurations[guild.id.asString] ?: GuildConfiguration()
+    operator fun get(guild: Guild): GuildConfiguration {
+        return (configurations[guild.id.asString] ?: GuildConfiguration()).copy(name = guild.name)
     }
 
-    operator fun set(guildId: Snowflake?, value: GuildConfiguration?) {
-        if (value != null && guildId != null) {
+    private fun set(guildId: Snowflake, value: GuildConfiguration?) {
+        if (value != null) {
             configurations[guildId.asString] = value
         } else {
             runBlocking {
@@ -102,8 +98,8 @@ class ConfigurationService : KoinComponent, Klogging {
         }
     }
 
-    operator fun set(guild: GuildBehavior?, value: GuildConfiguration?) {
-        set(guild?.id, value)
+    operator fun set(guild: Guild, value: GuildConfiguration) {
+        set(guild.id, value.copy(name = guild.name))
     }
 
     private suspend fun load() {

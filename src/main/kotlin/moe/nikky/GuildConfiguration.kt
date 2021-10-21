@@ -16,6 +16,7 @@ import kotlinx.serialization.Transient
 
 @Serializable
 data class GuildConfiguration(
+    val name: String = "",
     val adminRole: Snowflake? = null,
     val roleChooser: Map<String, RolePickerMessageConfig> = emptyMap(),
     val twitchNotifications: Map<String, TwitchNotificationConfig> = emptyMap(),

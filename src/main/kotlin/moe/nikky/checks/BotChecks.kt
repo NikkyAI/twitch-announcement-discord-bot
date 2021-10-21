@@ -20,7 +20,7 @@ suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: Configura
 }
 
 suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, locale: Locale) {
-    val guild = guildFor(event) ?: relayError("cannot load guild")
+    val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
     val guildConfig = config[guild]
 
     anyCheck(

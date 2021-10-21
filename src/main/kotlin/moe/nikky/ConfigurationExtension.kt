@@ -102,6 +102,11 @@ class ConfigurationExtension : Extension(), Klogging {
             action {
                 this@ConfigurationExtension.name
                 withLogContext(event, event.guild) { guild ->
+                    val guildConfig = config[guild]
+                    if(guildConfig.name.isEmpty()) {
+                        config[guild] = guildConfig
+                        config.save()
+                    }
 //                    try {
 //                        config.initializeGuild(kord, guild)
 //                    } catch (e: DiscordRelayedException) {
