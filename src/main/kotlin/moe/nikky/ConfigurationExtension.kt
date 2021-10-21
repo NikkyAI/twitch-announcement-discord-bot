@@ -11,6 +11,7 @@ import com.kotlindiscord.kord.extensions.types.respond
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.guild.GuildCreateEvent
 import io.klogging.Klogging
+import kotlinx.atomicfu.locks.ReentrantLock
 import org.koin.core.component.inject
 
 class ConfigurationExtension : Extension(), Klogging {

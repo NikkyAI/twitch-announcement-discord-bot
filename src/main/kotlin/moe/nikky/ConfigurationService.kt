@@ -5,6 +5,8 @@ import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
 import io.klogging.Klogging
+import kotlinx.atomicfu.locks.ReentrantLock
+import kotlinx.atomicfu.locks.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationException
@@ -23,6 +25,8 @@ import java.util.*
 class ConfigurationService : KoinComponent, Klogging {
     private val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
     private val configFile = configFolder.resolve("config.json")
+
+    private val lock = ReentrantLock()
 
     @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
@@ -120,19 +124,22 @@ class ConfigurationService : KoinComponent, Klogging {
     }
 
     suspend fun save() {
-        logger.infoF { "saving to ${configFile.absolutePath}" }
-        val serialized = try {
-            json.encodeToString(
-                versionedSerializer,
-                configurations
-            )
-        } catch (e: SerializationException) {
-            e.printStackTrace()
-            e.stackTraceToString()
-        }
-        configFile.absoluteFile.parentFile.mkdirs()
+        lock.withLock {
+            logger.infoF { "saving to ${configFile.absolutePath}" }
+            val serialized = try {
+                json.encodeToString(
+                    versionedSerializer,
+                    configurations
+                )
+            } catch (e: SerializationException) {
+                e.printStackTrace()
+//                e.stackTraceToString()
+                return@withLock
+            }
+            configFile.absoluteFile.parentFile.mkdirs()
 //        if (!configFile.exists()) configFile.createNewFile()
-        configFile.writeText(serialized)
+            configFile.writeText(serialized)
+        }
     }
 
 //    suspend fun initializeGuild(kord: Kord, guildBehavior: GuildBehavior) {
