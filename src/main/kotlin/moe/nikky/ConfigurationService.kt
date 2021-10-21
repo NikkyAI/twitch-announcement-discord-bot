@@ -85,7 +85,7 @@ class ConfigurationService : KoinComponent, Klogging {
     }
 
     operator fun get(guild: Guild): GuildConfiguration {
-        return (configurations[guild.id.asString] ?: GuildConfiguration()).copy(name = guild.name)
+        return configurations[guild.id.asString] ?: GuildConfiguration()
     }
 
     private fun set(guildId: Snowflake, value: GuildConfiguration?) {
