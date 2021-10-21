@@ -290,7 +290,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     }
                 }
             }
-
         }
 
         event<ReadyEvent> {
@@ -302,7 +301,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     )
                 ) {
                     logger.infoF { "launching twitch background job" }
-                    backgroundJob = kord.launch(coroutineContext) {
+                    backgroundJob = kord.launch(
+                        logContext(
+                            "event" to "TwitchLoop"
+                        ) + CoroutineName("TwitchLoop")
+                    ) {
                         while (true) {
                             delay(15_000)
                             val token = httpClient.getToken()
@@ -313,9 +316,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             } else {
                                 logger.errorF { "failed to acquire token" }
                             }
-//                            kord.guilds.collect { guild ->
-//                                checkStreams(guild)
-//                            }
                         }
                     }
                 }
@@ -528,9 +528,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
                 updateMessageId(messageId)
             }
-
         }
-
     }
 
     private suspend fun findMessage(channel: TextChannel, userData: TwitchUserData, webhook: Webhook): Message? {
@@ -568,35 +566,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             footer {
                 text = streamData.game_name
             }
-        }
-    }
-
-    private suspend fun checkTwitchStreamers(
-        guildBehavior: GuildBehavior,
-        state: GuildConfiguration,
-        token: Token,
-        userDataMap: Map<String, TwitchUserData>,
-        streamDataMap: Map<String, StreamData>,
-        gameDataMap: Map<String, TwitchGameData>,
-        channelInfoMap: Map<String, TwitchChannelInfo>,
-        webhooks: Map<Snowflake, Webhook>,
-    ) {
-        state.twitchNotifications.forEach { (_, twitchNotifSetting) ->
-            val userData = userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@forEach
-            val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@forEach
-            val webhook = webhooks[twitchNotifSetting.channel] ?: return@forEach
-            val streamData = streamDataMap[userData.login.lowercase()]
-            val gameData = gameDataMap[streamData?.game_name?.lowercase()]
-            updateTwitchNotificationMessage(
-                guildBehavior,
-                twitchNotifSetting,
-                token,
-                userData,
-                channelInfo,
-                streamData,
-                gameData,
-                webhook
-            )
         }
     }
 
@@ -652,9 +621,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         if (streamDataMap.isNotEmpty()) {
             val userName = streamDataMap.values.random().user_name
+            val message = when (streamDataMap.size) {
+                1 -> userName
+                else -> "$userName and ${streamDataMap.size - 1} More"
+            }
             kord.editPresence {
                 status = PresenceStatus.Online
-                watching(userName)
+                watching(message)
             }
         } else {
             kord.editPresence {
@@ -671,103 +644,29 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     )
                 ) {
                     try {
-                        checkTwitchStreamers(
-                            guild,
-                            guildConfig,
-                            token,
-                            userDataMap,
-                            streamDataMap,
-                            gameDataMap,
-                            channelInfoMap,
-                            webhooks
-                        )
+                        guildConfig.twitchNotifications.forEach { (_, twitchNotifSetting) ->
+                            val userData = userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@withContext
+                            val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@withContext
+                            val webhook = webhooks[twitchNotifSetting.channel] ?: return@withContext
+                            val streamData = streamDataMap[userData.login.lowercase()]
+                            val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+                            updateTwitchNotificationMessage(
+                                guild,
+                                twitchNotifSetting,
+                                token,
+                                userData,
+                                channelInfo,
+                                streamData,
+                                gameData,
+                                webhook
+                            )
+                        }
                     } catch (e: DiscordRelayedException) {
                         logger.errorF { e.cause }
                     } catch (e: Exception) {
                         logger.errorF(e) { e.message }
                     }
                 }
-            }
-        }
-    }
-
-    private suspend fun checkStreams(guild: Guild, token: Token) = coroutineScope {
-        val guildConfig = config[guild]
-        if (guildConfig.twitchNotifications.isEmpty()) return@coroutineScope
-
-        logger.traceF { "checking twitch status" }
-
-        // check required permission in channels
-//        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct().filter {
-//            val channel = it.asChannel()
-//            val hasPermissions = channel.botHasPermissions(*requiredPermissions)
-//            if (!hasPermissions) {
-//                logger.errorF { "missing permissions in channel ${channel.name}" }
-//            }
-//            hasPermissions
-//        }
-        val validChannels = guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct()
-
-        val filteredNotifications =
-            guildConfig.twitchNotifications //.filter { it.value.channel(guild) in validChannels }
-
-        val webhooks = validChannels.mapNotNull { channel ->
-            withContext(logContext("channel" to channel.asChannel().name)) {
-                getWebhook(channel)
-            }
-        }.associateBy { it.channel.id }
-
-        val configStates = listOf(guildConfig)
-
-        val token = httpClient.getToken() ?: return@coroutineScope
-        val streamDataMap = httpClient.getStreams(
-            token,
-            guildConfig.let {
-                filteredNotifications.values.map(TwitchNotificationConfig::twitchUserName)
-            }.distinct()
-        ) ?: return@coroutineScope
-        val userDataMap = httpClient.getUsers(
-            token,
-            guildConfig.let {
-                filteredNotifications.values.map(TwitchNotificationConfig::twitchUserName)
-            }.distinct()
-        ) ?: return@coroutineScope
-        val gameDataMap = httpClient.getGames(
-            token,
-            streamDataMap.values.map { it.game_name }
-        ) ?: return@coroutineScope
-        val channelInfoMap = httpClient.getChannelInfo(
-            token,
-            userDataMap.values.map { it.id }
-        ) ?: return@coroutineScope
-
-        if (streamDataMap.isNotEmpty()) {
-            val userName = streamDataMap.values.random().user_name
-            kord.editPresence {
-                status = PresenceStatus.Online
-                watching(userName)
-            }
-        } else {
-            kord.editPresence {
-                status = PresenceStatus.Idle
-                afk = true
-            }
-        }
-
-        configStates.forEach { state ->
-            launch(
-
-            ) {
-                checkTwitchStreamers(
-                    guild,
-                    state,
-                    token,
-                    userDataMap,
-                    streamDataMap,
-                    gameDataMap,
-                    channelInfoMap,
-                    webhooks
-                )
             }
         }
     }
