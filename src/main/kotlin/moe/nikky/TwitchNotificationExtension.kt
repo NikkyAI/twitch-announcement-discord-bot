@@ -106,7 +106,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             ) {
                 while (true) {
                     delay(15_000)
-                    logger.debugF { "checking streams" }
                     val token = httpClient.getToken()
                     if (token != null) {
                         checkStreams(kord.guilds.toList(), token)
@@ -316,9 +315,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 name = "status"
                 description = "check status of twitch background loop"
 
-                requireBotPermissions(
-                    *requiredPermissions
-                )
                 check {
                     hasBotControl(config)
                 }
