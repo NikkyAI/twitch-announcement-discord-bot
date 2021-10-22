@@ -18,7 +18,6 @@ import com.kotlindiscord.kord.extensions.utils.respond
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
-import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.TextChannelBehavior
 import dev.kord.core.behavior.channel.createWebhook
@@ -55,7 +54,6 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
 import org.koin.core.component.inject
-import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
@@ -66,6 +64,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
+    private val scope = CoroutineScope(CoroutineName("TwitchLoop"))
     private var backgroundJob: Job? = null
 
     companion object {
@@ -96,6 +95,28 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //            logger = Logger.DEFAULT
 //            level = LogLevel.INFO
 //        }
+    }
+
+    init {
+        scope.launch {
+            backgroundJob = kord.launch(
+                logContext(
+                    "event" to "TwitchLoop"
+                ) + CoroutineName("TwitchLoop")
+            ) {
+                while (true) {
+                    delay(15_000)
+                    logger.debugF { "checking streams" }
+                    val token = httpClient.getToken()
+                    if (token != null) {
+                        checkStreams(kord.guilds.toList(), token)
+                    } else {
+                        logger.errorF { "failed to acquire token" }
+                    }
+                }
+            }
+        }
+
     }
 
     inner class TwitchAddArgs : Arguments() {
@@ -290,37 +311,53 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     }
                 }
             }
-        }
 
-        event<ReadyEvent> {
-            action {
-                withContext(
-                    logContext(
-                        "event" to event::class.simpleName,
-                        "extension" to name
-                    )
-                ) {
-                    logger.infoF { "launching twitch background job" }
-                    backgroundJob = kord.launch(
-                        logContext(
-                            "event" to "TwitchLoop"
-                        ) + CoroutineName("TwitchLoop")
-                    ) {
-                        while (true) {
-                            delay(15_000)
-                            val token = httpClient.getToken()
-                            if (token != null) {
-                                kord.guilds.toList().chunked(10).forEach { chunk ->
-                                    checkStreams(chunk, token)
-                                }
-                            } else {
-                                logger.errorF { "failed to acquire token" }
-                            }
-                        }
+            ephemeralSubCommand {
+                name = "status"
+                description = "check status of twitch background loop"
+
+                requireBotPermissions(
+                    *requiredPermissions
+                )
+                check {
+                    hasBotControl(config)
+                }
+
+                action {
+                    respond {
+                        content = "active: ${backgroundJob?.isActive}"
                     }
                 }
             }
         }
+
+//        event<ReadyEvent> {
+//            action {
+//                withContext(
+//                    logContext(
+//                        "event" to event::class.simpleName,
+//                        "extension" to name
+//                    )
+//                ) {
+//                    logger.infoF { "launching twitch background job" }
+//                    backgroundJob = kord.launch(
+//                        logContext(
+//                            "event" to "TwitchLoop"
+//                        ) + CoroutineName("TwitchLoop")
+//                    ) {
+//                        while (true) {
+//                            delay(15_000)
+//                            val token = httpClient.getToken()
+//                            if (token != null) {
+//                                checkStreams(kord.guilds.toList(), token)
+//                            } else {
+//                                logger.errorF { "failed to acquire token" }
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
     }
 
     private suspend fun add(
@@ -639,35 +676,40 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }
 
-        guildConfigs.forEach { (guild, guildConfig) ->
-            launch() {
-                withContext(
-                    logContext(
-                        "guild" to guild.name
-                    )
-                ) {
-                    try {
-                        guildConfig.twitchNotifications.forEach { (_, twitchNotifSetting) ->
-                            val userData = userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@withContext
-                            val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@withContext
-                            val webhook = webhooks[twitchNotifSetting.channel] ?: return@withContext
-                            val streamData = streamDataMap[userData.login.lowercase()]
-                            val gameData = gameDataMap[streamData?.game_name?.lowercase()]
-                            updateTwitchNotificationMessage(
-                                guild,
-                                twitchNotifSetting,
-                                token,
-                                userData,
-                                channelInfo,
-                                streamData,
-                                gameData,
-                                webhook
+        guildConfigs.entries.chunked(10).forEach { chunk ->
+            coroutineScope {
+                chunk.forEach { (guild, guildConfig) ->
+                    launch() {
+                        withContext(
+                            logContext(
+                                "guild" to guild.name
                             )
+                        ) {
+                            try {
+                                guildConfig.twitchNotifications.forEach { (_, twitchNotifSetting) ->
+                                    val userData =
+                                        userDataMap[twitchNotifSetting.twitchUserName.lowercase()] ?: return@withContext
+                                    val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@withContext
+                                    val webhook = webhooks[twitchNotifSetting.channel] ?: return@withContext
+                                    val streamData = streamDataMap[userData.login.lowercase()]
+                                    val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+                                    updateTwitchNotificationMessage(
+                                        guild,
+                                        twitchNotifSetting,
+                                        token,
+                                        userData,
+                                        channelInfo,
+                                        streamData,
+                                        gameData,
+                                        webhook
+                                    )
+                                }
+                            } catch (e: DiscordRelayedException) {
+                                logger.errorF { e.cause }
+                            } catch (e: Exception) {
+                                logger.errorF(e) { e.message }
+                            }
                         }
-                    } catch (e: DiscordRelayedException) {
-                        logger.errorF { e.cause }
-                    } catch (e: Exception) {
-                        logger.errorF(e) { e.message }
                     }
                 }
             }
@@ -734,7 +776,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 header("Client-ID", clientId)
                 header("Authorization", "Bearer ${token.access_token}")
             }.parseData(TwitchVideoData.serializer()).firstOrNull()
-        } catch(e: ServerResponseException) {
+        } catch (e: ServerResponseException) {
             logger.errorF { e.message }
             null
         }

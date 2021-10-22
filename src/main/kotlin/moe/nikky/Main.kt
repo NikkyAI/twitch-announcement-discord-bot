@@ -10,6 +10,7 @@ import dev.kord.common.entity.Snowflake
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
 import io.klogging.config.LevelRange
+import io.klogging.config.LoggingConfig
 import io.klogging.config.loggingConfiguration
 import io.klogging.config.seq
 import io.klogging.logger
@@ -49,55 +50,50 @@ suspend fun main() {
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
         }
         sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
+        sink("file_latest_trace", CUSTOM_RENDERER, logFile(File("logs/latest-trace.log")))
         val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
         sink("file", CUSTOM_RENDERER, logFile(File("logs/log-$timestamp.log")))
         val seqServer = envOrNull("SEQ_SERVER") //?: "http://localhost:5341"
         if (seqServer != null) {
             sink("seq", seq(seqServer))
         }
-        fun LevelRange.applySinks() {
-            toSink("stdout")
-            if (seqServer != null) {
-                toSink("seq")
+        fun LoggingConfig.applyFromMinLevel(level: Level) {
+            fromMinLevel(level) {
+                toSink("stdout")
+                if (seqServer != null) {
+                    toSink("seq")
+                }
+                toSink("file_latest")
+                toSink("file")
+                toSink("file_latest_trace")
             }
-            toSink("file_latest")
-            toSink("file")
         }
         logging {
             fromLoggerBase("moe.nikky", stopOnMatch = true)
-            fromMinLevel(Level.DEBUG) {
-                applySinks()
+            applyFromMinLevel(Level.DEBUG)
+            fromMinLevel(Level.TRACE) {
+                toSink("file_latest_trace")
             }
         }
         logging {
             fromLoggerBase("dev.kord.rest", stopOnMatch = true)
-            fromMinLevel(Level.INFO) {
-                applySinks()
-            }
+            applyFromMinLevel(Level.INFO)
         }
         logging {
             //TODO: fix logger matcher
             exactLogger("\\Q[R]:[KTOR]:[ExclusionRequestRateLimiter]\\E", stopOnMatch = true)
-            fromMinLevel(Level.INFO) {
-                applySinks()
-            }
+            applyFromMinLevel(Level.INFO)
         }
         logging {
             fromLoggerBase("dev.kord", stopOnMatch = true)
-            fromMinLevel(Level.INFO) {
-                applySinks()
-            }
+            applyFromMinLevel(Level.INFO)
         }
         logging {
             fromLoggerBase("com.kotlindiscord.kord.extensions", stopOnMatch = true)
-            fromMinLevel(Level.INFO) {
-                applySinks()
-            }
+            applyFromMinLevel(Level.INFO)
         }
         logging {
-            fromMinLevel(Level.INFO) {
-                applySinks()
-            }
+            applyFromMinLevel(Level.INFO)
         }
     }
     val token = env("BOT_TOKEN")
