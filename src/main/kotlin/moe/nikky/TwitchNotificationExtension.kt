@@ -574,8 +574,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 channel.lastMessageId ?: return null,
                 100
             ).filter { message ->
-                val author = message.data.author
+//                val author = message.data.author
+                val author = message.author ?: run {
+                    logger.warnF { "author was null, messageId: ${message.id}" }
+                    return@filter false
+                }
+                logger.traceF { "author: $author" }
                 author.id == webhook.id && author.username == userData.display_name
+
             }.firstOrNull()
         } catch(e: NullPointerException) {
             logger.errorF(e) { "failed to find old message" }
