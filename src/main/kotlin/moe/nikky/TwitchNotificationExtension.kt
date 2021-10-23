@@ -568,14 +568,19 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun findMessage(channel: TextChannel, userData: TwitchUserData, webhook: Webhook): Message? {
-        logger.debugF { "searching for message with author '${userData.display_name}' id: ${webhook.id}" }
-        return channel.getMessagesBefore(
-            channel.lastMessageId ?: return null,
-            100
-        ).filter { message ->
-            val author = message.data.author
-            author.id == webhook.id && author.username == userData.display_name
-        }.firstOrNull()
+        logger.debugF { "searching for message with author '${userData.display_name}' in '${channel.name}' webhook: ${webhook.id}" }
+        return try {
+            channel.getMessagesBefore(
+                channel.lastMessageId ?: return null,
+                100
+            ).filter { message ->
+                val author = message.data.author
+                author.id == webhook.id && author.username == userData.display_name
+            }.firstOrNull()
+        } catch(e: NullPointerException) {
+            logger.errorF(e) { "failed to find old message" }
+            null
+        }
     }
 
     private fun EmbedBuilder.buildEmbed(
