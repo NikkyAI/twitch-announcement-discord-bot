@@ -6,7 +6,10 @@ import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
+import dev.kord.core.entity.channel.Channel
+import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
+import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.core.firstOrNull
 import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
@@ -69,8 +72,9 @@ data class TwitchNotificationConfig(
         return guildBehavior.getRoleOrNull(role) ?: relayError("role $role could not be loaded")
     }
 
-    suspend fun channel(guildBehavior: GuildBehavior): TextChannel {
+    suspend fun channel(guildBehavior: GuildBehavior): TopGuildMessageChannel {
         return guildBehavior.getChannelOfOrNull<TextChannel>(channel)
+            ?: guildBehavior.getChannelOfOrNull<NewsChannel>(channel)
             ?: relayError("channel $channel could not be loaded as TextChannel")
     }
 }

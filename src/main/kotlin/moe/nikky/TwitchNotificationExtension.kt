@@ -9,7 +9,6 @@ import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
-import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
@@ -19,15 +18,16 @@ import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.channel.ChannelBehavior
-import dev.kord.core.behavior.channel.TextChannelBehavior
+import dev.kord.core.behavior.channel.TopGuildMessageChannelBehavior
 import dev.kord.core.behavior.channel.createWebhook
 import dev.kord.core.behavior.execute
 import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
+import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
-import dev.kord.core.event.gateway.ReadyEvent
+import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
@@ -363,9 +363,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     ): String {
         val guildConfig = config[guild]
 
-        val channelInput = arguments.channel ?: currentChannel
+        val channelInput = arguments.channel ?: currentChannel.asChannel()
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+            ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
+            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
         val user = try {
             val token = httpClient.getToken() ?: relayError("cannot get twitch token")
@@ -398,9 +399,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
         val guildConfig = config[guild]
 
-        val channelInput = arguments.channel ?: currentChannel
+        val channelInput = arguments.channel ?: currentChannel.asChannel()
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
-            ?: relayError("must be a TextChannel, was: ${channelInput::class.simpleName}")
+            ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
+            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
         val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
         val toRemove = guildConfig.twitchNotifications[toRemoveKey]
@@ -418,7 +420,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     @OptIn(ExperimentalTime::class)
-    private suspend fun getWebhook(channel: TextChannelBehavior): Webhook? {
+    private suspend fun getWebhook(channel: TopGuildMessageChannelBehavior): Webhook? {
         return try {
             webhooksCache[channel.id]?.also {
                 logger.traceF { "reusing webhook" }
@@ -455,7 +457,23 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         gameData: TwitchGameData?,
         webhook: Webhook,
     ) {
-        suspend fun updateMessageId(messageId: Snowflake) {
+        val channel = twitchNotificationConfig.channel(guild)
+        when(channel) {
+            is TextChannel, is NewsChannel -> {}
+            else -> {
+                logger.errorF { "channel: ${channel.name} is not a Text or News channel" }
+            }
+        }
+
+        suspend fun updateMessageId(message: Message, publish: Boolean = true) {
+            if(publish && channel is NewsChannel) {
+                try {
+                    logger.infoF { "publishing in ${channel.name}" }
+                    channel.getMessage(message.id).publish()
+                } catch (e: KtorRequestException) {
+                    logger.errorF { "missing permissions to publish" }
+                }
+            }
             config[guild] = config[guild].let { state ->
                 val key = twitchNotificationConfig.twitchUserName + "_" + twitchNotificationConfig.channel.asString
                 val twitchNotificationState = state.twitchNotifications[key]!!
@@ -463,17 +481,16 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 state.copy(
                     twitchNotifications = state.twitchNotifications + Pair(
                         key,
-                        twitchNotificationState.copy(message = messageId)
+                        twitchNotificationState.copy(message = message.id)
                     )
                 )
             }
             config.save()
         }
-
         val oldMessage = twitchNotificationConfig.message?.let {
-            twitchNotificationConfig.channel(guild).getMessageOrNull(it)
-        } ?: findMessage(twitchNotificationConfig.channel(guild), userData, webhook)?.also { foundMessage ->
-            updateMessageId(foundMessage.id)
+            channel.getMessageOrNull(it)
+        } ?: findMessage(channel, userData, webhook)?.also { foundMessage ->
+            updateMessageId(foundMessage, publish = false)
         }
         if (streamData != null) {
             // live
@@ -505,13 +522,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                 buildEmbed(userData, streamData, gameData)
                             }
                         }.id
-                        updateMessageId(messageId)
+                        val message = channel.getMessage(messageId)
+                        updateMessageId(message)
                     }
                     return
                 }
             }
             // was offline, creating new message and deleting old message
-            val messageId = webhook.execute(webhook.token!!) {
+            val message = webhook.execute(webhook.token!!) {
                 username = userData.display_name
                 avatarUrl = userData.profile_image_url
                 content =
@@ -519,8 +537,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 embed {
                     buildEmbed(userData, streamData, gameData)
                 }
-            }.id
-            updateMessageId(messageId)
+            }
+            updateMessageId(message)
             oldMessage?.delete()
         } else {
             // offline
@@ -551,23 +569,24 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             """.trimIndent()
                         }
                 val messageId = if (oldMessage != null) {
-                    kord.rest.webhook.editWebhookMessage(webhook.id, webhook.token!!, oldMessage.id) {
+                    val messageId = kord.rest.webhook.editWebhookMessage(webhook.id, webhook.token!!, oldMessage.id) {
                         content = message
                         embeds = mutableListOf()
                     }.id
+                    channel.getMessage(messageId)
                 } else {
                     webhook.execute(webhook.token!!) {
                         username = userData.display_name
                         avatarUrl = userData.profile_image_url
                         content = message
-                    }.id
+                    }
                 }
                 updateMessageId(messageId)
             }
         }
     }
 
-    private suspend fun findMessage(channel: TextChannel, userData: TwitchUserData, webhook: Webhook): Message? {
+    private suspend fun findMessage(channel: TopGuildMessageChannel, userData: TwitchUserData, webhook: Webhook): Message? {
         logger.debugF { "searching for message with author '${userData.display_name}' in '${channel.name}' webhook: ${webhook.id}" }
         return try {
             channel.getMessagesBefore(
