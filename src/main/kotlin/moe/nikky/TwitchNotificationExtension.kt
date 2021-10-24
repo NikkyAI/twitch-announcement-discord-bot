@@ -75,9 +75,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         private val requiredPermissions = arrayOf(
             Permission.ViewChannel,
-            Permission.ReadMessageHistory,
             Permission.ManageWebhooks,
-            Permission.ManageMessages
+            Permission.SendMessages,
+            Permission.ManageMessages,
+            Permission.ReadMessageHistory,
         )
     }
 
@@ -523,7 +524,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             }
                         }.id
                         val message = channel.getMessage(messageId)
-                        updateMessageId(message)
+                        updateMessageId(message, publish = true)
                     }
                     return
                 }
@@ -538,7 +539,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     buildEmbed(userData, streamData, gameData)
                 }
             }
-            updateMessageId(message)
+            updateMessageId(message, publish = true)
             oldMessage?.delete()
         } else {
             // offline
@@ -581,7 +582,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         content = message
                     }
                 }
-                updateMessageId(messageId)
+                updateMessageId(messageId, publish = false)
             }
         }
     }
@@ -653,12 +654,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //            }
 //            hasPermissions
 //        }
-        val validChannels = guildConfigs.keys.flatMap { guild ->
+        val channels = guildConfigs.keys.flatMap { guild ->
             val guildConfig = guildConfigs.getValue(guild)
             guildConfig.twitchNotifications.map { it.value.channel(guild) }.distinct()
         }
 
-        val webhooks = validChannels.mapNotNull { channel ->
+        val webhooks = channels.mapNotNull { channel ->
             withContext(logContext("channel" to channel.asChannel().name)) {
                 getWebhook(channel)
             }
