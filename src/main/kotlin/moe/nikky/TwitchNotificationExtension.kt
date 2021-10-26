@@ -6,6 +6,7 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSub
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
+import com.kotlindiscord.kord.extensions.components.ComponentRegistry
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
@@ -14,6 +15,7 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.respond
+import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
@@ -57,15 +59,17 @@ import org.koin.core.component.inject
 import kotlin.time.Duration
 import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class TwitchNotificationExtension() : Extension(), Klogging {
     override val name = "Twitch Notifications"
 
     private val config: ConfigurationService by inject()
+    private val componentRegistry: ComponentRegistry by inject()
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
     private val scope = CoroutineScope(CoroutineName("TwitchLoop"))
-    private var backgroundJob: Job? = null
+//    private var backgroundJob: Job? = null
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
@@ -99,27 +103,35 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     init {
-        scope.launch {
-            backgroundJob = kord.launch(
-                logContext(
-                    "event" to "TwitchLoop"
-                ) + CoroutineName("TwitchLoop")
-            ) {
-                while (true) {
-                    delay(15_000)
-                    try {
-                        val token = httpClient.getToken()
-                        if (token != null) {
-                            checkStreams(kord.guilds.toList(), token)
-                        } else {
-                            logger.errorF { "failed to acquire token" }
-                        }
-                    } catch (e: Exception) {
-                        logger.errorF(e) { "failed in twitch loop" }
-                    }
-                }
+        componentRegistry.scheduler.schedule(Duration.seconds(15), true, name = "Twitch Loop") {
+            val token = httpClient.getToken()
+            if (token != null) {
+                checkStreams(kord.guilds.toList(), token)
+            } else {
+                logger.errorF { "failed to acquire token" }
             }
         }
+//        scope.launch {
+//            backgroundJob = kord.launch(
+//                logContext(
+//                    "event" to "TwitchLoop"
+//                ) + CoroutineName("TwitchLoop")
+//            ) {
+//                while (true) {
+//                    delay(15_000)
+//                    try {
+//                        val token = httpClient.getToken()
+//                        if (token != null) {
+//                            checkStreams(kord.guilds.toList(), token)
+//                        } else {
+//                            logger.errorF { "failed to acquire token" }
+//                        }
+//                    } catch (e: Exception) {
+//                        logger.errorF(e) { "failed in twitch loop" }
+//                    }
+//                }
+//            }
+//        }
 
     }
 
@@ -316,20 +328,20 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
             }
 
-            ephemeralSubCommand {
-                name = "status"
-                description = "check status of twitch background loop"
-
-                check {
-                    hasBotControl(config)
-                }
-
-                action {
-                    respond {
-                        content = "active: ${backgroundJob?.isActive}"
-                    }
-                }
-            }
+//            ephemeralSubCommand {
+//                name = "status"
+//                description = "check status of twitch background loop"
+//
+//                check {
+//                    hasBotControl(config)
+//                }
+//
+//                action {
+//                    respond {
+//                        content = "active: ${backgroundJob?.isActive}"
+//                    }
+//                }
+//            }
         }
 
 //        event<ReadyEvent> {
