@@ -107,11 +107,15 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             ) {
                 while (true) {
                     delay(15_000)
-                    val token = httpClient.getToken()
-                    if (token != null) {
-                        checkStreams(kord.guilds.toList(), token)
-                    } else {
-                        logger.errorF { "failed to acquire token" }
+                    try {
+                        val token = httpClient.getToken()
+                        if (token != null) {
+                            checkStreams(kord.guilds.toList(), token)
+                        } else {
+                            logger.errorF { "failed to acquire token" }
+                        }
+                    } catch (e: Exception) {
+                        logger.errorF(e) { "failed in twitch loop" }
                     }
                 }
             }
@@ -423,24 +427,43 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     @OptIn(ExperimentalTime::class)
     private suspend fun getWebhook(channel: TopGuildMessageChannelBehavior): Webhook? {
         return try {
-            webhooksCache[channel.id]?.also {
-                logger.traceF { "reusing webhook" }
-            } ?: channel.webhooks.firstOrNull {
-                it.name == WEBHOOK_NAME
-            }?.also { webhook ->
-                logger.infoF { "found webhook" }
-                webhooksCache[channel.id] = webhook
-            } ?: channel.createWebhook(name = WEBHOOK_NAME) {
-                @Suppress("BlockingMethodInNonBlockingContext")
-                avatar = Image.raw(
-                    data = TwitchNotificationExtension::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
-                        ?.readAllBytes() ?: error("failed to read bytes"),
-                    format = Image.Format.PNG,
-                )
-            }.also { webhook ->
-                logger.infoF { "created webhook $webhook" }
-                webhooksCache[channel.id] = webhook
+            webhooksCache.getOrPut(channel.id) {
+                channel.webhooks.firstOrNull {
+                    it.name == WEBHOOK_NAME
+                }?.also { webhook ->
+                    logger.traceF { "found webhook" }
+                    webhooksCache[channel.id] = webhook
+                } ?: channel.createWebhook(name = WEBHOOK_NAME) {
+                    @Suppress("BlockingMethodInNonBlockingContext")
+                    avatar = Image.raw(
+                        data = TwitchNotificationExtension::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
+                            ?.readAllBytes() ?: error("failed to read bytes"),
+                        format = Image.Format.PNG,
+                    )
+                }.also { webhook ->
+                    logger.infoF { "created webhook $webhook" }
+                    webhooksCache[channel.id] = webhook
+                }
             }
+
+//            webhooksCache[channel.id]?.also {
+//                logger.traceF { "reusing webhook" }
+//            } ?: channel.webhooks.firstOrNull {
+//                it.name == WEBHOOK_NAME
+//            }?.also { webhook ->
+//                logger.traceF { "found webhook" }
+//                webhooksCache[channel.id] = webhook
+//            } ?: channel.createWebhook(name = WEBHOOK_NAME) {
+//                @Suppress("BlockingMethodInNonBlockingContext")
+//                avatar = Image.raw(
+//                    data = TwitchNotificationExtension::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
+//                        ?.readAllBytes() ?: error("failed to read bytes"),
+//                    format = Image.Format.PNG,
+//                )
+//            }.also { webhook ->
+//                logger.infoF { "created webhook $webhook" }
+//                webhooksCache[channel.id] = webhook
+//            }
         } catch (e: KtorRequestException) {
             logger.errorF { e.message }
             null
