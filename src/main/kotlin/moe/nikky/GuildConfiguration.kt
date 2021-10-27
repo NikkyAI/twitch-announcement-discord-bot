@@ -18,6 +18,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
 @Serializable
+@Deprecated("use database")
 data class GuildConfiguration(
     val name: String = "",
     val adminRole: Snowflake? = null,
@@ -30,6 +31,7 @@ data class GuildConfiguration(
 }
 
 @Serializable
+@Deprecated("use database")
 data class RolePickerMessageConfig(
     val channel: Snowflake,
     val message: Snowflake,
@@ -60,6 +62,7 @@ data class RolePickerMessageConfig(
 }
 
 @Serializable
+@Deprecated("use database")
 data class TwitchNotificationConfig(
     val twitchUserName: String,
     val channel: Snowflake,

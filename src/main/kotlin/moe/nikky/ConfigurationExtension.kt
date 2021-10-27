@@ -4,15 +4,17 @@ import com.kotlindiscord.kord.extensions.checks.hasPermission
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
+import com.kotlindiscord.kord.extensions.extensions.*
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
+import com.kotlindiscord.kord.extensions.utils.profileLink
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.guild.GuildCreateEvent
+import dev.kord.rest.Image
 import io.klogging.Klogging
 import kotlinx.atomicfu.locks.ReentrantLock
 import org.koin.core.component.inject
+import java.awt.image.ImagingOpException
 
 class ConfigurationExtension : Extension(), Klogging {
     override val name: String = "Configuration Extension"
@@ -61,12 +63,10 @@ class ConfigurationExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val guildConfig = config[guild]
-
-                        config[guild] = guildConfig.copy(
-                            adminRole = arguments.role.id
+                        config.database.guildConfigQueries.updateAdminRole(
+                            adminRole = arguments.role.id,
+                            guildId = guild.id
                         )
-                        config.save()
 
                         respond {
                             content = "config saved"
@@ -84,12 +84,10 @@ class ConfigurationExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val guildConfig = config[guild]
-
-                        config[guild] = guildConfig.copy(
-                            adminRole = null
+                        config.database.guildConfigQueries.updateAdminRole(
+                            adminRole = null,
+                            guildId = guild.id
                         )
-                        config.save()
                         respond {
                             content = "config saved"
                         }
@@ -99,26 +97,38 @@ class ConfigurationExtension : Extension(), Klogging {
 
         }
 
+        ephemeralMessageCommand {
+            name = "testmessagecmd"
+
+            action {
+                val targetMessage = event.interaction.getTarget()
+                respond {
+                    content = """message content: \n```${targetMessage.content}\n```"""
+                }
+            }
+        }
+        ephemeralUserCommand {
+            name = "testusercmd"
+
+            action {
+                val targetUser = event.interaction.getTarget()
+                respond {
+                    content = """
+                        |banner: ${targetUser.getBannerUrl(Image.Format.GIF)}
+                        |profile link: <${targetUser.profileLink}>
+                    """.trimMargin()
+                }
+            }
+        }
+
         event<GuildCreateEvent> {
             action {
                 this@ConfigurationExtension.name
                 withLogContext(event, event.guild) { guild ->
-                    val guildConfig = config[guild]
-                    if(guildConfig.name.isEmpty()) {
-                        config[guild] = guildConfig
-                        config.save()
-                    }
-//                    try {
-//                        config.initializeGuild(kord, guild)
-//                    } catch (e: DiscordRelayedException) {
-//                        logger.errorF(e) { "failed loading config" }
-//                        error(e.reason)
-//                    } catch (e: Exception) {
-//                        logger.errorF(e) { "failed loading config" }
-//                        error(e.message ?: "unknown error message")
-//                    }
-
-//                    config.save()
+                    config.database.guildConfigQueries.upsert(
+                        guildId = guild.id,
+                        name = guild.name,
+                    )
                 }
             }
         }

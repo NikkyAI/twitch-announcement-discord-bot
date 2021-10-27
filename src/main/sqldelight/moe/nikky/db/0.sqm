@@ -1,0 +1,40 @@
+import dev.kord.common.entity.Snowflake;
+
+CREATE TABLE guildConfig (
+    guildId INTEGER AS Snowflake NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    adminRole INTEGER AS Snowflake
+);
+
+CREATE TABLE twitchConfig (
+  guildId INTEGER AS Snowflake NOT NULL,
+  channel INTEGER AS Snowflake NOT NULL,
+  twitchUsername TEXT NOT NULL,
+  role INTEGER AS Snowflake NOT NULL, -- TODO: maybe nullable ?
+  message INTEGER AS Snowflake,
+  PRIMARY KEY (guildId, channel, twitchUsername)
+);
+
+CREATE TABLE roleChooserConfig (
+  roleChooserId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  guildId INTEGER AS Snowflake NOT NULL,
+  section TEXT NOT NULL,
+  description TEXT,
+  channel INTEGER AS Snowflake NOT NULL,
+  message INTEGER AS Snowflake NOT NULL
+);
+
+CREATE TABLE roleChooserMapping (
+  roleChooserId INTEGER NOT NULL,
+  reaction TEXT NOT NULL,
+  role INTEGER AS Snowflake NOT NULL,
+  PRIMARY KEY (roleChooserId, reaction),
+  FOREIGN KEY(roleChooserId) REFERENCES roleChooserConfig(roleChooserId)
+);
+
+CREATE TABLE appliedSchemaVersions (
+  version INTEGER AS Int
+);
+
+
+INSERT INTO appliedSchemaVersions VALUES (1);

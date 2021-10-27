@@ -1,159 +1,127 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.utils.envOrNull
+import com.squareup.sqldelight.ColumnAdapter
+import com.squareup.sqldelight.db.SqlDriver
+import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
+import dev.kord.core.entity.ReactionEmoji
+import dev.kord.core.entity.Role
+import dev.kord.core.firstOrNull
 import io.klogging.Klogging
 import kotlinx.atomicfu.locks.ReentrantLock
-import kotlinx.atomicfu.locks.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import moe.nikky.json.VersionMigrator
-import moe.nikky.json.VersionedSerializer
+import moe.nikky.db.*
 import org.koin.core.component.KoinComponent
 import java.io.File
+import java.sql.SQLException
 import java.util.*
 
 class ConfigurationService : KoinComponent, Klogging {
     private val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
-    private val configFile = configFolder.resolve("config.json")
+    private val configFile = configFolder.resolve("config.db")
 
-    private val lock = ReentrantLock()
+    private val driver: SqlDriver = JdbcSqliteDriver("jdbc:sqlite:${configFile.path.replace('\\','/')}")
+    val database = runBlocking { load() }
 
-    @OptIn(ExperimentalSerializationApi::class)
-    private val json = Json {
-        prettyPrint = true
-        prettyPrintIndent = "  "
-        encodeDefaults = true
+    fun getTwitchConfigs(guild: Guild): List<TwitchConfig> {
+        return database.twitchConfigQueries.getAll(guild.id).executeAsList()
     }
 
-    private val configurations: MutableMap<String, GuildConfiguration> = Collections.synchronizedMap(mutableMapOf())
+    fun getRoleChoosers(guildId: Snowflake): List<RoleChooserConfig> {
+        return database.roleChooserQueries.getAll(guildId).executeAsList()
+    }
+    fun findRoleChooser(guildId: Snowflake, section: String, channel: Snowflake): RoleChooserConfig? {
+        return database.roleChooserQueries.find(guildId, section, channel).executeAsOneOrNull()
+    }
 
-    private fun <K, V> Map<K, V>.replaceKey(oldKey: K, newKey: K, transform: (V) -> V = { it }): Map<K, V> =
-        this - oldKey + (newKey to transform(getValue(oldKey)))
+    suspend fun getRoleMapping(guildBehavior: GuildBehavior, roleChooserId: Long): Map<ReactionEmoji, Role> {
+        val roleMapping = database.roleMappingQueries.getAll(roleChooserId).executeAsList().associate { roleChooserMapping ->
+            roleChooserMapping.reaction to roleChooserMapping.role
+        }
+        return roleMapping.entries.associate { (reactionEmojiName, role) ->
+            val reactionEmoji = guildBehavior.emojis.firstOrNull { it.mention == reactionEmojiName }
+                ?.let { ReactionEmoji.from(it) }
+                ?: ReactionEmoji.Unicode(reactionEmojiName)
+            reactionEmoji to guildBehavior.getRole(role)
+        }
+    }
 
-    private fun <K, V> Map<K, V>.replaceValue(key: K, transform: (V) -> V): Map<K, V> =
-        this + (key to transform(getValue(key)))
-
-    private fun Map<String, JsonElement>.toJsonObject() = JsonObject(this)
-
-    val versionedSerializer = VersionedSerializer(
-        MapSerializer(
-            String.serializer(),
-            GuildConfiguration.serializer()
-        ),
-        currentVersion = 2,
-        migrations = mapOf(
-            0..1 to VersionMigrator(
-                json,
-                JsonObject.serializer(),
-                new = JsonObject.serializer()
-            ) { obj: JsonObject ->
-                obj.mapValues { (_, guildObj) ->
-                    guildObj.jsonObject.replaceValue("twitchNotifications") { twitchNotificationsObj ->
-                        twitchNotificationsObj.jsonObject.mapValues { (_, entry) ->
-                            entry.jsonObject.replaceKey("oldMessage", "message").toJsonObject()
-                        }.toJsonObject()
-                    }.toJsonObject()
-                }.toJsonObject().also {
-                    val objectString = json.encodeToString(JsonObject.serializer(), it)
-                    runBlocking {
-                        logger.infoF { "migration output: ${objectString}" }
-                    }
-                }
-            },
-            1..2 to VersionMigrator(
-                json, JsonObject.serializer(), JsonObject.serializer()
-            ) { obj: JsonObject ->
-                obj.mapValues { (_, guildObj) ->
-                    guildObj.jsonObject.replaceKey("editableRoles", "roleChooser") {
-                        JsonObject(emptyMap())
-                    }.toJsonObject()
-                }.toJsonObject()
-            }
+    private suspend fun load(): DiscordbotDatabase {
+        val snowFlakeAdapter = object : ColumnAdapter<Snowflake, Long> {
+            override fun decode(databaseValue: Long) = Snowflake(databaseValue.toULong())
+            override fun encode(value: Snowflake) = value.value.toLong()
+        }
+        val database = DiscordbotDatabase(
+            driver = driver,
+            guildConfigAdapter = GuildConfig.Adapter(
+                guildIdAdapter = snowFlakeAdapter,
+                adminRoleAdapter = snowFlakeAdapter,
+            ),
+            roleChooserConfigAdapter = RoleChooserConfig.Adapter(
+                guildIdAdapter = snowFlakeAdapter,
+                channelAdapter = snowFlakeAdapter,
+                messageAdapter = snowFlakeAdapter
+            ),
+            roleChooserMappingAdapter = RoleChooserMapping.Adapter(
+                roleAdapter = snowFlakeAdapter
+            ),
+            twitchConfigAdapter = TwitchConfig.Adapter(
+                guildIdAdapter = snowFlakeAdapter,
+                channelAdapter = snowFlakeAdapter,
+                roleAdapter = snowFlakeAdapter,
+                messageAdapter = snowFlakeAdapter,
+            )
         )
-    )
 
-    init {
-        runBlocking {
-            load()
+        val oldVersion: Int = try {
+            database.schemaVersionQueries.getSchemaVersion().executeAsOne().version?.toInt()!!
+        } catch (e: SQLException) {
+            e.printStackTrace()
+            0
         }
-    }
+        println("database is at version: $oldVersion")
 
-    operator fun get(guild: Guild): GuildConfiguration {
-        return configurations[guild.id.asString] ?: GuildConfiguration()
-    }
+        if (oldVersion < DiscordbotDatabase.Schema.version) {
+            println("updating $oldVersion -> ${DiscordbotDatabase.Schema.version}")
+            DiscordbotDatabase.Schema.migrate(
+                driver = driver,
+                oldVersion = oldVersion,
+                newVersion = DiscordbotDatabase.Schema.version,
+            )
 
-    private fun set(guildId: Snowflake, value: GuildConfiguration?) {
-        if (value != null) {
-            configurations[guildId.asString] = value
+//        database.schemaVersionQueries.setSchemaVersion(
+//            DiscordbotDatabase.Schema.version
+//        )
         } else {
-            runBlocking {
-                logger.errorF { "failed to store in $guildId : $value" }
-            }
+            println("schema up to date")
         }
-    }
 
-    operator fun set(guild: Guild, value: GuildConfiguration) {
-        set(guild.id, value.copy(name = guild.name))
-    }
-
-    private suspend fun load() {
-        logger.infoF { "loading from ${configFile.absolutePath}" }
-        configFile.absoluteFile.parentFile.mkdirs()
-        if (configFile.exists()) {
-            val newConfigurations = try {
-                json.decodeFromString(
-                    versionedSerializer,
-                    configFile.readText()
-                ).toMutableMap()
-            } catch (e: SerializationException) {
-                e.printStackTrace()
-                throw e
-            }
-            configurations += newConfigurations
-        }
+        return database
     }
 
     suspend fun save() {
-        lock.withLock {
-            logger.infoF { "saving to ${configFile.absolutePath}" }
-            val serialized = try {
-                json.encodeToString(
-                    versionedSerializer,
-                    configurations
-                )
-            } catch (e: SerializationException) {
-                e.printStackTrace()
-//                e.stackTraceToString()
-                return@withLock
-            }
-            configFile.absoluteFile.parentFile.mkdirs()
-//        if (!configFile.exists()) configFile.createNewFile()
-            configFile.writeText(serialized)
-        }
+//        lock.withLock {
+//            logger.infoF { "saving to ${configFile.absolutePath}" }
+//            val serialized = try {
+//                json.encodeToString(
+//                    versionedSerializer,
+//                    configurations
+//                )
+//            } catch (e: SerializationException) {
+//                e.printStackTrace()
+////                e.stackTraceToString()
+//                return@withLock
+//            }
+//            configFile.absoluteFile.parentFile.mkdirs()
+////        if (!configFile.exists()) configFile.createNewFile()
+//            configFile.writeText(serialized)
+//        }
     }
 
-//    suspend fun initializeGuild(kord: Kord, guildBehavior: GuildBehavior) {
-//        val guild = guildBehavior.asGuild()
-//        logger.infoF { "configuring ${guild.name}" }
-//
-//        val serializedConfig = serializedStates[guildBehavior.id.asString]?.also {
-//            logger.infoF { "loaded serialized config from file for ${guild.name}" }
-//        } ?: ConfigurationStateSerialized().also {
-//            logger.infoF { "created default serialized config" }
-//        }
-//
-//        set(guildBehavior, serializedConfig)
-//        logger.infoF { "FINISHED configuration of ${guild.name}" }
-//    }
 
 }

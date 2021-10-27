@@ -62,19 +62,20 @@ class BotInfoExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val guildConfig = config[guild]
+                        val guildConfig = config.database.guildConfigQueries.get(guild.id).executeAsOne()
+                        val roleChoosers = config.getRoleChoosers(guildId = guild.id)
 
                         respond {
                             val choosableRoles =
-                                guildConfig.roleChooser.entries.map { (section, rolePickerMessageState) ->
-                                    val roleMapping = rolePickerMessageState.roleMapping(guild)
-                                    "**$section**:\n" + roleMapping.entries.joinToString("\n") { (reaction, role) ->
+                                roleChoosers.map { roleChooser ->
+                                    val roleMapping = config.getRoleMapping(guild, roleChooser.roleChooserId)
+                                    "**${roleChooser.section}**:\n" + roleMapping.entries.joinToString("\n") { (reaction, role) ->
                                         "  ${reaction.mention}: ${role.mention}"
                                     }
                                 }
                                     .joinToString("\n\n")
 
-                            val twitch = guildConfig.twitchNotifications.entries.map { (_, twitchNotif) ->
+                            val twitch = config.getTwitchConfigs(guild).map { twitchNotif ->
                                 "<${twitchNotif.twitchUrl}> ${twitchNotif.role(guild).mention} in ${
                                     twitchNotif.channel(guild).mention
                                 }"

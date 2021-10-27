@@ -1,0 +1,24 @@
+upsert:
+  INSERT INTO guildConfig(guildId, name)
+    VALUES (?, ?)
+    ON CONFLICT(guildId) DO
+    UPDATE SET
+      name=excluded.name
+    ;
+
+updateAdminRole:
+  UPDATE guildConfig
+  SET adminRole=?
+  WHERE guildId=?
+ ;
+
+get:
+  SELECT *
+    FROM guildConfig
+    WHERE guildId=?
+  ;
+
+getAll:
+  SELECT *
+    FROM guildConfig
+  ;

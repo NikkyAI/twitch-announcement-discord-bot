@@ -1,0 +1,2 @@
+getSchemaVersion:
+    SELECT MAX(version) AS version FROM appliedSchemaVersions;

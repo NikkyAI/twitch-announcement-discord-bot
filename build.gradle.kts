@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
+    id("com.squareup.sqldelight")
     application
 }
 
@@ -52,6 +53,8 @@ dependencies {
 
     implementation("br.com.colman:dice-helper:_")
 
+    implementation("com.squareup.sqldelight:sqlite-driver:_")
+
     implementation(Square.okio)
 
     implementation("io.klogging:klogging-jvm:_")
@@ -72,6 +75,19 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions {
         jvmTarget = "16"
     }
+}
+
+sqldelight {
+    database("DiscordbotDatabase") {
+        packageName = "moe.nikky.db"
+        deriveSchemaFromMigrations = true
+        schemaOutputDirectory = file("src/main/sqldelight/databases")
+        dialect = "sqlite:3.24"
+        verifyMigrations = true
+    }
+//    Database { // This will be the name of the generated database class.
+//        packageName = "com.example"
+//    }
 }
 
 tasks {

@@ -9,7 +9,7 @@ import com.kotlindiscord.kord.extensions.types.respond
 import io.klogging.Klogging
 
 class DiceExtension() : Extension(), Klogging {
-    override val name: String = "Reality switching"
+    override val name: String = "Dice"
     override suspend fun setup() {
         publicSlashCommand(::DiceArgs) {
             name = "dice"

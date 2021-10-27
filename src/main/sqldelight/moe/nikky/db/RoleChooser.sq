@@ -1,0 +1,32 @@
+upsert:
+  INSERT INTO roleChooserConfig(guildId, section, description, channel, message)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(roleChooserId) DO
+    UPDATE SET
+      section=excluded.section,
+      description=excluded.description,
+      channel=excluded.channel,
+      message=excluded.message
+    ;
+
+getById:
+  SELECT *
+    FROM roleChooserConfig
+    WHERE roleChooserId=?
+    LIMIT 1
+    ;
+
+find:
+  SELECT *
+    FROM roleChooserConfig
+    WHERE guildId=?
+      AND section=?
+      AND channel=?
+    LIMIT 1
+    ;
+
+getAll:
+  SELECT *
+    FROM roleChooserConfig
+    WHERE guildId=?
+  ;

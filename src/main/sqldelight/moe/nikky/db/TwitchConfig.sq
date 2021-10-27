@@ -1,0 +1,52 @@
+upsert:
+  INSERT INTO twitchConfig(
+        guildId,
+        channel,
+        twitchUsername,
+        role,
+        message
+    )
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(guildId, channel, twitchUsername) DO
+    UPDATE SET
+       role=excluded.role,
+       message=message
+       ;
+
+updateMessage:
+    UPDATE twitchConfig
+    SET message=?
+    WHERE guildId=?
+       AND channel=?
+       AND twitchUsername=?
+   ;
+
+updateRole:
+    UPDATE twitchConfig
+    SET role=?
+    WHERE guildId=?
+       AND channel=?
+       AND twitchUsername=?
+   ;
+
+getAll:
+  SELECT *
+  FROM twitchConfig
+  WHERE guildId=?
+  ;
+
+get:
+  SELECT *
+  FROM twitchConfig
+  WHERE guildId=?
+    AND channel=?
+    AND twitchUsername=?
+  LIMIT 1
+  ;
+
+delete:
+  DELETE FROM twitchConfig
+  WHERE guildId=?
+    AND channel=?
+    AND twitchUsername=?
+  ;

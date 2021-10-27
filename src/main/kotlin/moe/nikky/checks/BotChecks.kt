@@ -10,6 +10,7 @@ import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.logger
 import moe.nikky.ConfigurationService
+import moe.nikky.adminRole
 import moe.nikky.relayError
 import java.util.*
 
@@ -21,7 +22,6 @@ suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: Configura
 
 suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, locale: Locale) {
     val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
-    val guildConfig = config[guild]
 
     anyCheck(
         {
@@ -29,14 +29,15 @@ suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, loca
         },
         {
             hasRoleNullable { event ->
-                guildConfig.adminRole(guild)
+                config.database.guildConfigQueries.get(guild.id).executeAsOneOrNull()?.adminRole(guild)
             }
         }
     )
     if (!passed) {
+        val adminRole = config.database.guildConfigQueries.get(guild.id).executeAsOneOrNull()?.adminRole(guild)
         fail(
             "must have permission: **${Permission.Administrator.translate(locale)}**"
-                    + (guildConfig.adminRole(guild)?.let { "\nor role: ** ${it.mention}**" }
+                    + (adminRole?.let { "\nor role: ** ${it.mention}**" }
                 ?: "\nand no adminrole is configured")
         )
     }

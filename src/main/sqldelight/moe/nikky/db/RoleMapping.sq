@@ -1,0 +1,19 @@
+upsert:
+  INSERT INTO roleChooserMapping(roleChooserId, reaction, role)
+    VALUES (?, ?, ?)
+    ON CONFLICT(roleChooserId, reaction) DO
+    UPDATE SET
+      role=excluded.role
+    ;
+
+delete:
+  DELETE FROM roleChooserMapping
+  WHERE roleChooserId=?
+    AND reaction=?
+  ;
+
+getAll:
+  SELECT *
+  FROM roleChooserMapping
+  WHERE roleChooserId=?
+  ;

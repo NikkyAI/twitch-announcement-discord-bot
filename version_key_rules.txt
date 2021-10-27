@@ -1,6 +1,9 @@
 com.kotlindiscord.kord.extensions:*
                   ^^^^^^^^^^^^^^^
 
+dev.kord.x:emoji
+    ^^^^^^.^^^^^
+
 io.github.microutils:kotlin-logging
                      ^^^^^^^^^^^^^^
 
