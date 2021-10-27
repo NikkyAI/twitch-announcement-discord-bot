@@ -16,6 +16,7 @@ import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.respond
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
+import com.kotlindiscord.kord.extensions.utils.scheduling.Task
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
@@ -68,7 +69,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
-    private val scope = CoroutineScope(CoroutineName("TwitchLoop"))
+//    private val scope = CoroutineScope(CoroutineName("TwitchLoop"))
 //    private var backgroundJob: Job? = null
 
     companion object {
@@ -102,14 +103,30 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //        }
     }
 
+    private val scheduler = Scheduler()
+    private val task: Task
+
     init {
-        componentRegistry.scheduler.schedule(Duration.seconds(15), true, name = "Twitch Loop") {
-            val token = httpClient.getToken()
-            if (token != null) {
-                checkStreams(kord.guilds.toList(), token)
-            } else {
-                logger.errorF { "failed to acquire token" }
+        task = scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
+            try {
+                withContext(
+                    logContext(
+                        "event" to "TwitchLoop"
+                    )
+                ) {
+                    logger.debugF { "checking streams" }
+                    val token = httpClient.getToken()
+                    if (token != null) {
+                        checkStreams(kord.guilds.toList(), token)
+                    } else {
+                        logger.errorF { "failed to acquire token" }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.errorF(e) { "failed in twitch loop" }
             }
+            logger.debugF { "DONE checking streams" }
+            restartTask()
         }
 //        scope.launch {
 //            backgroundJob = kord.launch(
@@ -133,6 +150,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //            }
 //        }
 
+    }
+
+    private fun restartTask() {
+        task.restart()
     }
 
     inner class TwitchAddArgs : Arguments() {
@@ -328,20 +349,25 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
             }
 
-//            ephemeralSubCommand {
-//                name = "status"
-//                description = "check status of twitch background loop"
-//
-//                check {
-//                    hasBotControl(config)
-//                }
-//
-//                action {
-//                    respond {
-//                        content = "active: ${backgroundJob?.isActive}"
-//                    }
-//                }
-//            }
+            ephemeralSubCommand {
+                name = "status"
+                description = "check status of twitch background loop"
+
+                check {
+                    hasBotControl(config)
+                }
+
+                action {
+                    respond {
+                        if (!task.running) {
+                            content = "running: ${task.running}, restarting..."
+                            task.start()
+                        } else {
+                            content = "running: ${task.running}, restarting..."
+                        }
+                    }
+                }
+            }
         }
 
 //        event<ReadyEvent> {
@@ -494,15 +520,16 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         webhook: Webhook,
     ) {
         val channel = twitchNotificationConfig.channel(guild)
-        when(channel) {
-            is TextChannel, is NewsChannel -> {}
+        when (channel) {
+            is TextChannel, is NewsChannel -> {
+            }
             else -> {
                 logger.errorF { "channel: ${channel.name} is not a Text or News channel" }
             }
         }
 
         suspend fun updateMessageId(message: Message, publish: Boolean = true) {
-            if(publish && channel is NewsChannel) {
+            if (publish && channel is NewsChannel) {
                 try {
                     logger.infoF { "publishing in ${channel.name}" }
                     channel.getMessage(message.id).publish()
@@ -523,6 +550,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
             config.save()
         }
+
         val oldMessage = twitchNotificationConfig.message?.let {
             channel.getMessageOrNull(it)
         } ?: findMessage(channel, userData, webhook)?.also { foundMessage ->
@@ -622,7 +650,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
     }
 
-    private suspend fun findMessage(channel: TopGuildMessageChannel, userData: TwitchUserData, webhook: Webhook): Message? {
+    private suspend fun findMessage(
+        channel: TopGuildMessageChannel,
+        userData: TwitchUserData,
+        webhook: Webhook,
+    ): Message? {
         logger.debugF { "searching for message with author '${userData.display_name}' in '${channel.name}' webhook: ${webhook.id}" }
         return try {
             channel.getMessagesBefore(
@@ -638,7 +670,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 author.id == webhook.id && author.username == userData.display_name
 
             }.firstOrNull()
-        } catch(e: NullPointerException) {
+        } catch (e: NullPointerException) {
             logger.errorF(e) { "failed to find old message" }
             null
         }
