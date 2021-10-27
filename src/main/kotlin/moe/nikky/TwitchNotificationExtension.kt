@@ -279,7 +279,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         val messages = config.database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
                             val message = entry.message?.let { channel.getMessageOrNull(it) }
                             """
-                            <https://twitch.tv/${entry.twitchUsername}>
+                            <https://twitch.tv/${entry.twitchUserName}>
                             ${entry.role(guild).mention}
                             ${entry.channel(guild).mention}
                             ${message?.getJumpUrl()}
@@ -387,7 +387,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         config.database.twitchConfigQueries.upsert(
             guildId = guild.id,
             channel = channel.id,
-            twitchUsername = user.login,
+            twitchUserName = user.login,
             role = arguments.role.id,
             message = null
         )
@@ -401,11 +401,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
             ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
-        val toRemoveKey = "${arguments.twitchUserName.lowercase()}_${channel.id.asString}"
         val toRemove = config.database.twitchConfigQueries.get(
             guildId = guild.id,
             channel = channel.id,
-            twitchUsername = arguments.twitchUserName
+            twitchUserName = arguments.twitchUserName
         ).executeAsOneOrNull()
 
         toRemove?.message?.let {
@@ -415,7 +414,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         config.database.twitchConfigQueries.delete(
             guildId = guild.id,
             channel = channel.id,
-            twitchUsername = arguments.twitchUserName
+            twitchUserName = arguments.twitchUserName
         )
 
         return "removed ${arguments.twitchUserName} from ${channel.mention}"
@@ -500,7 +499,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 message = message.id,
                 guildId = guild.id,
                 channel = channel.id,
-                twitchUsername = twitchConfig.twitchUsername
+                twitchUserName = twitchConfig.twitchUserName
             )
         }
 
@@ -677,13 +676,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         val streamDataMap = httpClient.getStreams(
             token,
             mappedTwitchConfigs.values.flatMap {
-                it.map(TwitchConfig::twitchUsername)
+                it.map(TwitchConfig::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
         val userDataMap = httpClient.getUsers(
             token,
             mappedTwitchConfigs.values.flatMap {
-                it.map(TwitchConfig::twitchUsername)
+                it.map(TwitchConfig::twitchUserName)
             }.distinct()
         ) ?: return@coroutineScope
         val gameDataMap = httpClient.getGames(
@@ -724,7 +723,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             try {
                                 twitchConfigs.forEach { twitchConfig ->
                                     val userData =
-                                        userDataMap[twitchConfig.twitchUsername.lowercase()] ?: return@withContext
+                                        userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@withContext
                                     val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@withContext
                                     val webhook = webhooks[twitchConfig.channel] ?: return@withContext
                                     val streamData = streamDataMap[userData.login.lowercase()]

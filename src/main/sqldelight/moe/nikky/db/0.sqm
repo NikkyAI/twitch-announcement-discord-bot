@@ -9,10 +9,10 @@ CREATE TABLE guildConfig (
 CREATE TABLE twitchConfig (
   guildId INTEGER AS Snowflake NOT NULL,
   channel INTEGER AS Snowflake NOT NULL,
-  twitchUsername TEXT NOT NULL,
+  twitchUserName TEXT NOT NULL,
   role INTEGER AS Snowflake NOT NULL, -- TODO: maybe nullable ?
   message INTEGER AS Snowflake,
-  PRIMARY KEY (guildId, channel, twitchUsername)
+  PRIMARY KEY (guildId, channel, twitchUserName)
 );
 
 CREATE TABLE roleChooserConfig (

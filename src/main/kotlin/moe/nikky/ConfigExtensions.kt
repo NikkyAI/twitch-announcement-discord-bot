@@ -19,7 +19,7 @@ suspend fun GuildConfig.adminRole(guildBehavior: GuildBehavior): Role? {
     return adminRole?.let { guildBehavior.getRoleOrNull(it) }
 }
 
-val TwitchConfig.twitchUrl: String get() = "https://twitch.tv/$twitchUsername"
+val TwitchConfig.twitchUrl: String get() = "https://twitch.tv/$twitchUserName"
 
 suspend fun TwitchConfig.role(guildBehavior: GuildBehavior): Role {
     return guildBehavior.getRoleOrNull(role) ?: relayError("role $role could not be loaded")

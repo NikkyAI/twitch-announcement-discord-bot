@@ -2,7 +2,10 @@ package moe.nikky
 
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import dev.kord.common.entity.Snowflake
+import io.klogging.Level
+import io.klogging.config.loggingConfiguration
 import io.klogging.logger
+import io.klogging.sending.STDOUT
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.builtins.MapSerializer
@@ -74,6 +77,17 @@ private val versionedSerializer = VersionedSerializer(
 )
 
 fun main(args: Array<String>) = runBlocking {
+
+    loggingConfiguration {
+        sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
+        logging {
+            fromMinLevel(Level.DEBUG) {
+                toSink("stdout")
+            }
+        }
+    }
+
+
     val config = ConfigurationService()
 
     val database = config.database
@@ -103,7 +117,7 @@ fun main(args: Array<String>) = runBlocking {
                 twitchConfigQueries.upsert(
                     guildId = guildId,
                     channel = twitchConfig.channel,
-                    twitchUsername = twitchConfig.twitchUserName,
+                    twitchUserName = twitchConfig.twitchUserName,
                     role = twitchConfig.role,
                     message = null, //twitchConfig.message
                 )
@@ -111,7 +125,7 @@ fun main(args: Array<String>) = runBlocking {
                     twitchConfigQueries.updateMessage(
                         guildId = guildId,
                         channel = twitchConfig.channel,
-                        twitchUsername = twitchConfig.twitchUserName,
+                        twitchUserName = twitchConfig.twitchUserName,
                         message = twitchConfig.message
                     )
                 }
