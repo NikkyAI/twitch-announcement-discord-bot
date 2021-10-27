@@ -27,9 +27,6 @@ import kotlin.time.ExperimentalTime
 private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
 
-@Deprecated("remove")
-val commandPrefix: String = if (TEST_GUILD_ID != null) "" else ""
-
 val dockerLogging = envOrNull("DOCKER_LOGGING") == "true"
 
 @OptIn(ExperimentalTime::class)
@@ -65,7 +62,6 @@ suspend fun main() {
                 }
                 toSink("file_latest")
                 toSink("file")
-                toSink("file_latest_trace")
             }
         }
         logging {

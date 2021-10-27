@@ -8,3 +8,4 @@ build/
 /run
 
 .env
+buildscan.log

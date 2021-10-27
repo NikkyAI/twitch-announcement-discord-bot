@@ -23,7 +23,7 @@ import java.io.File
 
 
 val DOCKER_RENDERER: RenderString = { e: LogEvent ->
-    val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
+    val loggerOrFile = e.items["file"] ?: e.logger
     val message = "${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
     val cleanedItems = e.items - "file"
     val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""

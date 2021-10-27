@@ -6,7 +6,6 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSub
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
-import com.kotlindiscord.kord.extensions.components.ComponentRegistry
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
@@ -65,11 +64,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     override val name = "Twitch Notifications"
 
     private val config: ConfigurationService by inject()
-    private val componentRegistry: ComponentRegistry by inject()
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
-//    private var backgroundJob: Job? = null
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
@@ -103,27 +100,24 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private val scheduler = Scheduler()
-    private val task: Task
-
-    init {
-        task = scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
-            try {
-                withContext(
-                    logContext(
-                        "event" to "TwitchLoop"
-                    )
-                ) {
-                    logger.debugF { "checking streams" }
-                    val token = httpClient.getToken()
-                    if (token != null) {
-                        checkStreams(kord.guilds.toList(), token)
-                    } else {
-                        logger.errorF { "failed to acquire token" }
-                    }
+    private val task: Task = scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
+        try {
+            withContext(
+                logContext(
+                    "event" to "TwitchLoop"
+                )
+            ) {
+                logger.debugF { "checking streams" }
+                val token = httpClient.getToken()
+                if (token != null) {
+                    checkStreams(kord.guilds.toList(), token)
+                } else {
+                    logger.errorF { "failed to acquire token" }
                 }
-            } catch (e: Exception) {
-                logger.errorF(e) { "failed in twitch loop" }
             }
+        } catch (e: Exception) {
+            logger.errorF(e) { "failed in twitch loop" }
+        } finally {
             restartTask()
         }
     }
@@ -335,12 +329,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     respond {
-                        if (!task.running) {
-                            content = "running: ${task.running}, restarting..."
-                            task.start()
-                        } else {
-                            content = "running: ${task.running}, restarting..."
-                        }
+                        content = "running: ${task.running}"
                     }
                 }
             }
