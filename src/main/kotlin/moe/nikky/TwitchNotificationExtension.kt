@@ -69,7 +69,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
-//    private val scope = CoroutineScope(CoroutineName("TwitchLoop"))
 //    private var backgroundJob: Job? = null
 
     companion object {
@@ -125,31 +124,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             } catch (e: Exception) {
                 logger.errorF(e) { "failed in twitch loop" }
             }
-            logger.debugF { "DONE checking streams" }
             restartTask()
         }
-//        scope.launch {
-//            backgroundJob = kord.launch(
-//                logContext(
-//                    "event" to "TwitchLoop"
-//                ) + CoroutineName("TwitchLoop")
-//            ) {
-//                while (true) {
-//                    delay(15_000)
-//                    try {
-//                        val token = httpClient.getToken()
-//                        if (token != null) {
-//                            checkStreams(kord.guilds.toList(), token)
-//                        } else {
-//                            logger.errorF { "failed to acquire token" }
-//                        }
-//                    } catch (e: Exception) {
-//                        logger.errorF(e) { "failed in twitch loop" }
-//                    }
-//                }
-//            }
-//        }
-
     }
 
     private fun restartTask() {
