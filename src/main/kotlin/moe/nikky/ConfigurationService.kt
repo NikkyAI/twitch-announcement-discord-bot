@@ -84,21 +84,18 @@ class ConfigurationService : KoinComponent, Klogging {
             e.printStackTrace()
             0
         }
-        println("database is at version: $oldVersion")
+        logger.infoF { "database is at version: $oldVersion" }
 
         if (oldVersion < DiscordbotDatabase.Schema.version) {
-            println("updating $oldVersion -> ${DiscordbotDatabase.Schema.version}")
+            logger.infoF { "updating $oldVersion -> ${DiscordbotDatabase.Schema.version}" }
             DiscordbotDatabase.Schema.migrate(
                 driver = driver,
                 oldVersion = oldVersion,
                 newVersion = DiscordbotDatabase.Schema.version,
             )
 
-//        database.schemaVersionQueries.setSchemaVersion(
-//            DiscordbotDatabase.Schema.version
-//        )
         } else {
-            println("schema up to date")
+            logger.infoF { "schema up to date" }
         }
 
         return database
