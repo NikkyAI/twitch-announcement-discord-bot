@@ -8,18 +8,20 @@ import com.kotlindiscord.kord.extensions.extensions.*
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.profileLink
+import dev.kord.cache.api.data.description
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.rest.Image
 import io.klogging.Klogging
 import kotlinx.atomicfu.locks.ReentrantLock
+import moe.nikky.db.DiscordbotDatabase
 import org.koin.core.component.inject
 import java.awt.image.ImagingOpException
 
 class ConfigurationExtension : Extension(), Klogging {
     override val name: String = "Configuration Extension"
 
-    private val config: ConfigurationService by inject()
+    private val database: DiscordbotDatabase by inject()
 
     inner class SetAdminRoleArgs : Arguments() {
         val role by role("role", "admin role")
@@ -63,7 +65,7 @@ class ConfigurationExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        config.database.guildConfigQueries.updateAdminRole(
+                        database.guildConfigQueries.updateAdminRole(
                             adminRole = arguments.role.id,
                             guildId = guild.id
                         )
@@ -84,7 +86,7 @@ class ConfigurationExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        config.database.guildConfigQueries.updateAdminRole(
+                        database.guildConfigQueries.updateAdminRole(
                             adminRole = null,
                             guildId = guild.id
                         )
@@ -94,38 +96,13 @@ class ConfigurationExtension : Extension(), Klogging {
                     }
                 }
             }
-
-        }
-
-        ephemeralMessageCommand {
-            name = "testmessagecmd"
-
-            action {
-                val targetMessage = event.interaction.getTarget()
-                respond {
-                    content = """message content: \n```${targetMessage.content}\n```"""
-                }
-            }
-        }
-        ephemeralUserCommand {
-            name = "testusercmd"
-
-            action {
-                val targetUser = event.interaction.getTarget()
-                respond {
-                    content = """
-                        |banner: ${targetUser.getBannerUrl(Image.Format.GIF)}
-                        |profile link: <${targetUser.profileLink}>
-                    """.trimMargin()
-                }
-            }
         }
 
         event<GuildCreateEvent> {
             action {
                 this@ConfigurationExtension.name
                 withLogContext(event, event.guild) { guild ->
-                    config.database.guildConfigQueries.upsert(
+                    database.guildConfigQueries.upsert(
                         guildId = guild.id,
                         name = guild.name,
                     )

@@ -14,12 +14,13 @@ import io.klogging.Klogging
 import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import moe.nikky.checks.hasBotControl
+import moe.nikky.db.DiscordbotDatabase
 import org.koin.core.component.inject
 
 class BotInfoExtension : Extension(), Klogging {
     override val name: String = "Bot Info Extension"
 
-    private val config: ConfigurationService by inject()
+    private val database: DiscordbotDatabase by inject()
 
     private val inviteUrl: String = runBlocking {
         val permission = Permissions(
@@ -57,25 +58,25 @@ class BotInfoExtension : Extension(), Klogging {
                 description = "some info about the bot ($botName)"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val guildConfig = config.database.guildConfigQueries.get(guild.id).executeAsOne()
-                        val roleChoosers = config.getRoleChoosers(guildId = guild.id)
+                        val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
+                        val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
 
                         respond {
                             val choosableRoles =
                                 roleChoosers.map { roleChooser ->
-                                    val roleMapping = config.getRoleMapping(guild, roleChooser.roleChooserId)
+                                    val roleMapping = database.getRoleMapping(guild, roleChooser)
                                     "**${roleChooser.section}**:\n" + roleMapping.entries.joinToString("\n") { (reaction, role) ->
                                         "  ${reaction.mention}: ${role.mention}"
                                     }
                                 }
                                     .joinToString("\n\n")
 
-                            val twitch = config.getTwitchConfigs(guild).map { twitchNotif ->
+                            val twitch = database.getTwitchConfigs(guild).map { twitchNotif ->
                                 "<${twitchNotif.twitchUrl}> ${twitchNotif.role(guild).mention} in ${
                                     twitchNotif.channel(guild).mention
                                 }"

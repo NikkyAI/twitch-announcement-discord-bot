@@ -9,19 +9,20 @@ import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.logger
-import moe.nikky.ConfigurationService
 import moe.nikky.adminRole
+import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.relayError
 import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
 
-suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(config: ConfigurationService) {
-    hasBotControl(config, event.getLocale())
+suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(database: DiscordbotDatabase) {
+    hasBotControl(database, event.getLocale())
 }
 
-suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, locale: Locale) {
+suspend fun CheckContext<Event>.hasBotControl(database: DiscordbotDatabase, locale: Locale) {
     val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
+    val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
 
     anyCheck(
         {
@@ -29,12 +30,12 @@ suspend fun CheckContext<Event>.hasBotControl(config: ConfigurationService, loca
         },
         {
             hasRoleNullable { event ->
-                config.database.guildConfigQueries.get(guild.id).executeAsOneOrNull()?.adminRole(guild)
+                guildConfig.adminRole(guild)
             }
         }
     )
     if (!passed) {
-        val adminRole = config.database.guildConfigQueries.get(guild.id).executeAsOneOrNull()?.adminRole(guild)
+        val adminRole = guildConfig.adminRole(guild)
         fail(
             "must have permission: **${Permission.Administrator.translate(locale)}**"
                     + (adminRole?.let { "\nor role: ** ${it.mention}**" }

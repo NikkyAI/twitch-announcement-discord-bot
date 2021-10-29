@@ -5,14 +5,14 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.converters.C
 import com.kotlindiscord.kord.extensions.commands.application.slash.converters.impl.optionalEnumChoice
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalUser
 import com.kotlindiscord.kord.extensions.commands.converters.impl.user
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.chatCommand
+import com.kotlindiscord.kord.extensions.extensions.*
 import com.kotlindiscord.kord.extensions.extensions.event
-import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
+import com.kotlindiscord.kord.extensions.utils.profileLink
 import com.kotlindiscord.kord.extensions.utils.respond
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
+import dev.kord.rest.Image
 import io.klogging.Klogging
 
 class TestExtension : Extension(), Klogging {
@@ -83,6 +83,30 @@ class TestExtension : Extension(), Klogging {
 
                 respond {
                     content = "*bonks ${realTarget.mention} on the head*"
+                }
+            }
+        }
+
+        ephemeralMessageCommand {
+            name = "testmessagecmd"
+
+            action {
+                val targetMessage = event.interaction.getTarget()
+                respond {
+                    content = """message content: \n```${targetMessage.content}\n```"""
+                }
+            }
+        }
+        ephemeralUserCommand {
+            name = "testusercmd"
+
+            action {
+                val targetUser = event.interaction.getTarget()
+                respond {
+                    content = """
+                        |banner: ${targetUser.getBannerUrl(Image.Format.GIF)}
+                        |profile link: <${targetUser.profileLink}>
+                    """.trimMargin()
                 }
             }
         }

@@ -17,6 +17,7 @@ import io.klogging.logger
 import io.klogging.sending.STDOUT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.debug.DebugProbes
+import moe.nikky.db.DiscordbotDatabase
 import org.koin.dsl.module
 import java.io.File
 import java.security.Security
@@ -156,7 +157,7 @@ private fun registerKoinModules() {
     getKoin().loadModules(
         listOf(
             module {
-                single { ConfigurationService() }
+                single { DiscordbotDatabase.load() }
             }
         )
     )

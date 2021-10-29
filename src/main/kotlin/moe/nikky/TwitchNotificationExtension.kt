@@ -55,6 +55,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
 import moe.nikky.checks.hasBotControl
+import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.db.TwitchConfig
 import org.koin.core.component.inject
 import kotlin.time.Duration
@@ -64,7 +65,7 @@ import kotlin.time.ExperimentalTime
 class TwitchNotificationExtension() : Extension(), Klogging {
     override val name = "Twitch Notifications"
 
-    private val config: ConfigurationService by inject()
+    private val database: DiscordbotDatabase by inject()
     private var token: Token? = null
     private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
@@ -149,7 +150,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 locking = true
 
                 check {
-                    hasBotControl(config, event.getLocale())
+                    hasBotControl(database, event.getLocale())
                 }
 
                 requireBotPermissions(
@@ -179,7 +180,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "removes a streamer from notifications"
 
                 check {
-                    hasBotControl(config, event.getLocale())
+                    hasBotControl(database, event.getLocale())
                 }
 
                 requireBotPermissions(
@@ -217,7 +218,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 locking = true
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 requireBotPermissions(
@@ -244,7 +245,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "removes a streamer from notifications"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 requireBotPermissions(
@@ -271,12 +272,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "lists all streamers in config"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val messages = config.database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
+                        val messages = database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
                             val message = entry.message?.let { channel.getMessageOrNull(it) }
                             """
                             <https://twitch.tv/${entry.twitchUserName}>
@@ -308,7 +309,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     *requiredPermissions
                 )
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 action {
@@ -323,7 +324,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "check status of twitch background loop"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 action {
@@ -384,7 +385,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
         }
 
-        config.database.twitchConfigQueries.upsert(
+        database.twitchConfigQueries.upsert(
             guildId = guild.id,
             channel = channel.id,
             twitchUserName = user.login,
@@ -401,7 +402,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
             ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
-        val toRemove = config.database.twitchConfigQueries.get(
+        val toRemove = database.twitchConfigQueries.get(
             guildId = guild.id,
             channel = channel.id,
             twitchUserName = arguments.twitchUserName
@@ -411,7 +412,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             channel.deleteMessage(it)
         }
 
-        config.database.twitchConfigQueries.delete(
+        database.twitchConfigQueries.delete(
             guildId = guild.id,
             channel = channel.id,
             twitchUserName = arguments.twitchUserName
@@ -495,7 +496,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     logger.errorF { "failed to publish" }
                 }
             }
-            config.database.twitchConfigQueries.updateMessage(
+            database.twitchConfigQueries.updateMessage(
                 message = message.id,
                 guildId = guild.id,
                 channel = channel.id,
@@ -657,7 +658,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
     private suspend fun checkStreams(guilds: List<Guild>, token: Token) = coroutineScope {
         val mappedTwitchConfigs = guilds.mapNotNull { guild ->
-            guild to config.getTwitchConfigs(guild)
+            guild to database.getTwitchConfigs(guild)
         }.toMap()
 
         logger.traceF { "checking twitch status for ${guilds.map { it.name }}" }

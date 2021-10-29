@@ -39,13 +39,14 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import moe.nikky.checks.hasBotControl
 import moe.nikky.converter.reactionEmoji
+import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.db.RoleChooserConfig
 import org.koin.core.component.inject
 import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
     override val name: String = "Role management"
-    private val config: ConfigurationService by inject()
+    private val database: DiscordbotDatabase by inject()
     private val liveMessageJobs = mutableMapOf<Long, Job>()
 
     companion object {
@@ -83,7 +84,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "adds a new reaction to role mapping"
 
                 check {
-                    hasBotControl(config, event.getLocale())
+                    hasBotControl(database, event.getLocale())
                     guildFor(event)?.asGuild()?.botHasPermissions(
                         Permission.ManageRoles
                     )
@@ -117,7 +118,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "removes a role mapping"
 
                 check {
-                    hasBotControl(config, event.getLocale())
+                    hasBotControl(database, event.getLocale())
                 }
 
                 requireBotPermissions(
@@ -154,7 +155,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "adds a new reaction to role mapping"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                     guildFor(event)?.asGuild()?.botHasPermissions(
                         Permission.ManageRoles
                     )
@@ -184,7 +185,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "removes a role mapping"
 
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                 }
 
                 requireBotPermissions(
@@ -213,7 +214,7 @@ class RoleManagementExtension : Extension(), Klogging {
                     *requiredPermissions
                 )
                 check {
-                    hasBotControl(config)
+                    hasBotControl(database)
                     guildFor(event)?.asGuild()?.botHasPermissions(
                         Permission.ManageRoles
                     )
@@ -232,7 +233,7 @@ class RoleManagementExtension : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    val roleChoosers = config.database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
+                    val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
 
                     roleChoosers.map { it.channel(guild) }.distinct().forEach {
                         val channel = it.asChannel()
@@ -256,7 +257,7 @@ class RoleManagementExtension : Extension(), Klogging {
                             val message = roleChooserConfig.getMessageOrRelayError(guild)
                                 ?: roleChooserConfig.channel(guild)
                                     .createMessage("placeholder for section ${roleChooserConfig.section}")
-                            val roleMapping = config.getRoleMapping(guild, roleChooserId = roleChooserConfig.roleChooserId)
+                            val roleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
                             message.edit {
                                 content = buildMessage(
                                     guild,
@@ -304,16 +305,20 @@ class RoleManagementExtension : Extension(), Klogging {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
-        val roleChooserConfig = config.findRoleChooser(guildId = guild.id, section = arguments.section, channel = channel.id)
+        val roleChooserConfig = database.roleChooserQueries.find(guildId = guild.id,
+            section = arguments.section,
+            channel = channel.id).executeAsOneOrNull()
             ?: run {
-                config.database.roleChooserQueries.upsert(
+                database.roleChooserQueries.upsert(
                     guildId = guild.id,
                     section = arguments.section,
                     description = null,
                     channel = channel.id,
                     message = channel.createMessage("placeholder").id
                 )
-                config.findRoleChooser(guildId = guild.id, section = arguments.section, channel = channel.id)
+                database.roleChooserQueries.find(guildId = guild.id,
+                    section = arguments.section,
+                    channel = channel.id).executeAsOneOrNull()
                     ?: relayError("failed to create database entry")
             }
 
@@ -323,13 +328,13 @@ class RoleManagementExtension : Extension(), Klogging {
         val message = roleChooserConfig?.getMessageOrRelayError(guild)
             ?: channel.createMessage("placeholder for section ${arguments.section}")
 
-        config.database.roleMappingQueries.upsert(
+        database.roleMappingQueries.upsert(
             roleChooserId = roleChooserConfig.roleChooserId,
             reaction = reactionEmoji.mention,
             role = arguments.role.id
         )
 
-        val newRoleMapping = config.getRoleMapping(guild, roleChooserId = roleChooserConfig.roleChooserId)
+        val newRoleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
         message.edit {
             content = buildMessage(
                 guild,
@@ -361,19 +366,21 @@ class RoleManagementExtension : Extension(), Klogging {
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
-        val roleChooserConfig = config.findRoleChooser(guildId = guild.id, section = arguments.section, channel = channel.id)
+        val roleChooserConfig = database.roleChooserQueries.find(guildId = guild.id,
+            section = arguments.section,
+            channel = channel.id).executeAsOneOrNull()
             ?: relayError("no roleselection section ${arguments.section}")
 
         logger.infoF { "reaction: '${arguments.reaction}'" }
         val reactionEmoji = arguments.reaction
 
-        val roleMapping = config.getRoleMapping(guild, roleChooserConfig.roleChooserId)
+        val roleMapping = database.getRoleMapping(guild, roleChooserConfig)
         val removedRole = roleMapping[reactionEmoji] ?: relayError("no role exists for ${reactionEmoji.mention}")
 
         val message = roleChooserConfig.getMessageOrRelayError(guild)
             ?: channel.createMessage("placeholder for section ${arguments.section}")
 
-        config.database.roleMappingQueries.delete(
+        database.roleMappingQueries.delete(
             roleChooserId = roleChooserConfig.roleChooserId,
             reaction = reactionEmoji.mention
         )
@@ -381,7 +388,7 @@ class RoleManagementExtension : Extension(), Klogging {
             content = buildMessage(
                 guild,
                 roleChooserConfig,
-                config.getRoleMapping(guild, roleChooserConfig.roleChooserId),
+                database.getRoleMapping(guild, roleChooserConfig),
             )
         }
         message.getReactors(reactionEmoji)
