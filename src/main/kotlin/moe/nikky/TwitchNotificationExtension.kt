@@ -688,7 +688,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         val channels = mappedTwitchConfigs.keys.flatMap { guild ->
             val twitchConfig = mappedTwitchConfigs.getValue(guild)
-            twitchConfig.map { it.channel(guild) }.distinct()
+            twitchConfig.mapNotNull {
+                try {
+                    it.channel(guild)
+                } catch (e: DiscordRelayedException) {
+                    logger.errorF(e) { "failed to resolve channel by id" }
+                    null
+                }
+            }.distinct()
         }
 
         val webhooks = channels.mapNotNull { channel ->

@@ -16,9 +16,13 @@ import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.core.firstOrNull
 import dev.kord.rest.request.KtorRequestException
+import io.klogging.context.LogContext
+import io.klogging.context.logContext
 import io.klogging.logger
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import moe.nikky.db.*
+import mu.withLoggingContext
 import java.io.File
 import java.sql.SQLException
 
@@ -103,19 +107,27 @@ suspend fun TwitchConfig.role(guildBehavior: GuildBehavior): Role {
     return guildBehavior.getRoleOrNull(role) ?: relayError("role $role could not be loaded")
 }
 
-suspend fun TwitchConfig.channel(guildBehavior: GuildBehavior): TopGuildMessageChannel {
-    return guildBehavior.getChannelOfOrNull<TextChannel>(channel)
+suspend inline fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageChannel {
+    return withContext(
+        logContext("guild" to guildBehavior.name)
+    ) {
+        guildBehavior.getChannelOfOrNull<TextChannel>(channel)
         ?: guildBehavior.getChannelOfOrNull<NewsChannel>(channel)
-        ?: relayError("channel $channel could not be loaded as TextChannel")
+        ?: relayError("channel $channel in '${guildBehavior.name}' could not be loaded as TextChannel")
+    }
 }
 
 
-suspend fun RoleChooserConfig.channel(guildBehavior: GuildBehavior): TextChannel {
-    return guildBehavior.getChannelOfOrNull<TextChannel>(channel)
-        ?: relayError("channel $channel could not be loaded as TextChannel")
+suspend inline fun RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
+    return withContext(
+        logContext("guild" to guildBehavior.name)
+    ) {
+        guildBehavior.getChannelOfOrNull<TextChannel>(channel)
+            ?: relayError("channel $channel in '${guildBehavior.name}' could not be loaded as TextChannel")
+    }
 }
 
-suspend fun RoleChooserConfig.getMessageOrRelayError(guildBehavior: GuildBehavior): Message? = try {
+suspend fun RoleChooserConfig.getMessageOrRelayError(guildBehavior: Guild): Message? = try {
     channel(guildBehavior).getMessageOrNull(message)
 } catch (e: KtorRequestException) {
     logger.errorF { e.message }

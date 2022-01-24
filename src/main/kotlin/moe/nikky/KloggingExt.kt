@@ -19,6 +19,7 @@ import io.ktor.utils.io.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import mu.withLoggingContext
 import okio.buffer
 import okio.sink
 import java.io.File
@@ -85,19 +86,20 @@ suspend fun <E : Event, T> Extension.withLogContext(
     block: suspend CoroutineScope.(Guild) -> T,
 ): T {
     val guild = guildBehavior?.asGuild() ?: relayError("cannot load guild")
-    val items = mutableListOf<Pair<String, Any?>>()
+    val items = mutableListOf<Pair<String, String?>>()
     if (event is InteractionCreateEvent) {
         items += "channel" to (event.interaction.channel.asChannel() as? GuildChannel)?.name
     }
+    val eventName = event::class.simpleName
     items += listOf(
         "guild" to "'${guild.name}'",
-        "event" to event::class.simpleName,
+        "event" to eventName,
         "extension" to name,
     )
     return withContext(
         logContext(*items.toTypedArray())
     ) {
-        logger.infoF { "triggered event ${event::class.simpleName}" }
+        logger.infoF { "triggered event $eventName" }
         block(guild)
     }
 }
