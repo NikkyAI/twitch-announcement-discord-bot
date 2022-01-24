@@ -45,7 +45,10 @@ class BotInfoExtension : Extension(), Klogging {
     }
 
     inner class SetAdminRoleArgs : Arguments() {
-        val role by role("role", "admin role")
+        val role by role {
+            name = "role"
+            description = "admin role"
+        }
     }
 
     override suspend fun setup() {

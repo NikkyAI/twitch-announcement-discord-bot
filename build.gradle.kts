@@ -18,7 +18,7 @@ repositories {
         name = "kotlindiscord"
     }
     maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
-        name = "klogging"
+        name = "oss-sonatype"
     }
 //    mavenLocal()
 }

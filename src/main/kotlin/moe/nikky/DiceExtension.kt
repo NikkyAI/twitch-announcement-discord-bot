@@ -2,7 +2,7 @@ package moe.nikky
 
 import br.com.colman.dicehelper.*
 import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.converters.impl.coalescedString
+import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
@@ -41,7 +41,10 @@ class DiceExtension() : Extension(), Klogging {
     }
 
     inner class DiceArgs : Arguments() {
-        val notation by coalescedString("notation", "dices to roll")
+        val notation by string {
+            name = "notation"
+            description = "dices to roll"
+        }
     }
 }
 

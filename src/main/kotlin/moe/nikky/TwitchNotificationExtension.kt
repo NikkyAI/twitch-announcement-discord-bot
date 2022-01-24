@@ -16,6 +16,7 @@ import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.respond
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
 import com.kotlindiscord.kord.extensions.utils.scheduling.Task
+import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
@@ -43,10 +44,13 @@ import io.ktor.client.features.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.KSerializer
@@ -102,41 +106,59 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private val scheduler = Scheduler()
-    private val task: Task = scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
-        try {
-            withContext(
-                logContext(
-                    "event" to "TwitchLoop"
-                )
-            ) {
-                logger.debugF { "checking streams" }
-                val token = httpClient.getToken()
-                if (token != null) {
-                    checkStreams(kord.guilds.toList(), token)
-                } else {
-                    logger.errorF { "failed to acquire token" }
+    private val task: Task =
+        scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
+            try {
+                withContext(
+                    logContext(
+                        "event" to "TwitchLoop"
+                    )
+                ) {
+                    logger.debugF { "checking streams" }
+                    val token = httpClient.getToken()
+                    if (token != null) {
+                        checkStreams(kord.guilds.toList(), token)
+                    } else {
+                        logger.errorF { "failed to acquire token" }
+                    }
                 }
+            } catch (e: Exception) {
+                logger.errorF(e) { "failed in twitch loop" }
+            } finally {
+                restartTask()
             }
-        } catch (e: Exception) {
-            logger.errorF(e) { "failed in twitch loop" }
-        } finally {
-            restartTask()
         }
-    }
 
     private fun restartTask() {
         task.restart()
     }
 
     inner class TwitchAddArgs : Arguments() {
-        val role by role("role", "notification ping")
-        val twitchUserName by string("twitch", "Twitch username")
-        val channel by optionalChannel("channel", "notification channel, defaults to current channel")
+        val role by role {
+            name = "role"
+            description = "notification ping"
+        }
+        val twitchUserName by string {
+            name = "twitch"
+            description = "Twitch username"
+        }
+        val channel by optionalChannel {
+            name = "channel"
+            description = "notification channel, defaults to current channel"
+            requireChannelType(ChannelType.GuildText)
+        }
     }
 
     inner class TwitchRemoveArgs : Arguments() {
-        val twitchUserName by string("twitch", "Twitch username")
-        val channel by optionalChannel("channel", "notification channel, defaults to current channel")
+        val twitchUserName by string {
+            name = "twitch"
+            description = "Twitch username"
+        }
+        val channel by optionalChannel {
+            name = "channel"
+            description = "notification channel, defaults to current channel"
+            requireChannelType(ChannelType.GuildText)
+        }
     }
 
     override suspend fun setup() {
@@ -277,15 +299,16 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val messages = database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
-                            val message = entry.message?.let { channel.getMessageOrNull(it) }
-                            """
+                        val messages =
+                            database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
+                                val message = entry.message?.let { channel.getMessageOrNull(it) }
+                                """
                             <https://twitch.tv/${entry.twitchUserName}>
                             ${entry.role(guild).mention}
                             ${entry.channel(guild).mention}
                             ${message?.getJumpUrl()}
                         """.trimIndent()
-                        }
+                            }
 
                         val response = if (messages.isNotEmpty()) {
                             "registered twitch notifications: \n\n" + messages.joinToString("\n\n")
@@ -657,9 +680,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun checkStreams(guilds: List<Guild>, token: Token) = coroutineScope {
-        val mappedTwitchConfigs = guilds.mapNotNull { guild ->
-            guild to database.getTwitchConfigs(guild)
-        }.toMap()
+        val mappedTwitchConfigs = guilds.associateWith { guild ->
+            database.getTwitchConfigs(guild)
+        }
 
         logger.traceF { "checking twitch status for ${guilds.map { it.name }}" }
 

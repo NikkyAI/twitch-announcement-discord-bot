@@ -6,7 +6,6 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.converters.i
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalUser
 import com.kotlindiscord.kord.extensions.commands.converters.impl.user
 import com.kotlindiscord.kord.extensions.extensions.*
-import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.profileLink
 import com.kotlindiscord.kord.extensions.utils.respond
@@ -130,18 +129,24 @@ class TestExtension : Extension(), Klogging {
 
     inner class SlapArgs : Arguments() {
         // A single user argument, required for the command to be able to run
-        val target by optionalUser("target", description = "Person you want to slap")
-        private val nullableWeapon by optionalEnumChoice<Weapon>(
-            displayName = "weapon",
-            description = "What you want to slap with",
+        val target by optionalUser {
+            name = "target"
+            description = "Person you want to slap"
+        }
+        private val nullableWeapon by optionalEnumChoice<Weapon> {
+            name = "weapon"
+            description = "What you want to slap with"
             typeName = "weapon"
-        )
+        }
         val weapon: Weapon get() = nullableWeapon ?: Weapon.Trout
     }
 
     inner class BonkArgs : Arguments() {
         // A single user argument, required for the command to be able to run
-        val target by user("target", description = "Person that needs a bonk")
+        val target by user {
+            name = "target"
+            description = "Person that needs a bonk"
+        }
     }
 
     enum class Weapon(override val readableName: String, val message: String) : ChoiceEnum {

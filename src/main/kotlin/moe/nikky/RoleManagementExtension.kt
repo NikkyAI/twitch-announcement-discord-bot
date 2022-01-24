@@ -17,6 +17,7 @@ import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.respond
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.annotation.KordPreview
+import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.Permission
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
@@ -33,7 +34,6 @@ import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -60,16 +60,39 @@ class RoleManagementExtension : Extension(), Klogging {
     }
 
     inner class AddRoleArg : Arguments() {
-        val section by string("section", "Section Title")
-        val reaction by reactionEmoji("emoji", "Reaction Emoji")
-        val role by role("role", "Role")
-        val channel by optionalChannel("channel", "channel")
+        val section by string {
+            name = "section"
+            description = "Section Title"
+        }
+        val reaction by reactionEmoji {
+            name = "emoji"
+            description = "Reaction Emoji"
+        }
+        val role by role {
+            name = "role"
+            description = "Role"
+        }
+        val channel by optionalChannel {
+            name = "channel"
+            description = "channel"
+            requireChannelType(ChannelType.GuildText)
+        }
     }
 
     inner class RemoveRoleArg : Arguments() {
-        val section by string("section", "Section Title")
-        val reaction by reactionEmoji("emoji", "Reaction Emoji")
-        val channel by optionalChannel("channel", "channel")
+        val section by string {
+            name = "section"
+            description = "Section Title"
+        }
+        val reaction by reactionEmoji {
+            name = "emoji"
+            description = "Reaction Emoji"
+        }
+        val channel by optionalChannel {
+            name = "channel"
+            description = "channel"
+            requireChannelType(ChannelType.GuildText)
+        }
     }
 
     @OptIn(ExperimentalTime::class)
@@ -252,6 +275,7 @@ class RoleManagementExtension : Extension(), Klogging {
                     }
 
                     roleChoosers.forEach { roleChooserConfig ->
+                        logger.info { "processing role chooser: $roleChooserConfig" }
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
                             val message = roleChooserConfig.getMessageOrRelayError(guild)
@@ -264,6 +288,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                     roleChooserConfig,
                                     roleMapping
                                 )
+                                logger.infoF { "new message content: \n$content\n" }
                             }
 
                             try {
@@ -325,7 +350,7 @@ class RoleManagementExtension : Extension(), Klogging {
         logger.infoF { "reaction: '${arguments.reaction}'" }
         val reactionEmoji = arguments.reaction
 
-        val message = roleChooserConfig?.getMessageOrRelayError(guild)
+        val message = roleChooserConfig.getMessageOrRelayError(guild)
             ?: channel.createMessage("placeholder for section ${arguments.section}")
 
         database.roleMappingQueries.upsert(

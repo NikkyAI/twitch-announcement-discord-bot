@@ -14,6 +14,8 @@ import io.klogging.rendering.colour5
 import io.klogging.rendering.evalTemplate
 import io.klogging.rendering.localString
 import io.klogging.sending.SendString
+import io.ktor.util.cio.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -50,27 +52,31 @@ val CUSTOM_RENDERER_ANSI: RenderString = { e: LogEvent ->
     message + maybeItems + maybeStackTrace
 }
 
-fun logFile(file: File, append: Boolean = false): SendString {
-    file.parentFile.mkdirs()
-    if (!file.exists()) file.createNewFile()
-    val sink = file.sink(append = append).buffer()
-
-    return { line ->
-        sink.writeUtf8(line + "\n")
-        delay(1)
-    }
-}
-
-//fun logFile(file: File): SendString {
+//fun logFile(file: File, append: Boolean = false): SendString {
 //    file.parentFile.mkdirs()
-//    file.delete()
-//    file.createNewFile()
-//    val writeChannel = file.writeChannel()
+//    if (!file.exists()) file.createNewFile()
+//    val sink = file.sink(append = append).buffer()
+//
 //    return { line ->
-//        writeChannel.writeStringUtf8(line + "\n")
+//        sink.writeUtf8(line + "\n")
 //        delay(1)
 //    }
 //}
+
+fun logFile(file: File, append: Boolean = false): SendString {
+    file.parentFile.mkdirs()
+    if(!append && file.exists()) {
+        file.delete()
+        file.createNewFile()
+    } else if(!file.exists()) {
+        file.createNewFile()
+    }
+    val writeChannel = file.writeChannel()
+    return { line ->
+        writeChannel.writeStringUtf8(line + "\n")
+        delay(1)
+    }
+}
 
 private val logger = logger("moe.nikky.KloggingExt")
 suspend fun <E : Event, T> Extension.withLogContext(

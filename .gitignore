@@ -9,3 +9,5 @@ build/
 
 .env
 buildscan.log
+
+results/

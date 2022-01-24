@@ -13,7 +13,7 @@ services:
       - ./logs:/logs
   seq:
     image: datalust/seq:latest
-    restart: unless-stopped
+#    restart: unless-stopped
     environment:
       ACCEPT_EULA: Y
       SEQ_FIRSTRUN_ADMINPASSWORDHASH: $PH
