@@ -74,20 +74,13 @@ val workflow = workflow(
             command = "docker inspect ${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest" +
                     " | jq -r .[0].ReposDigests[]"
         )
-        uses(
-            name = "Discord Workflow Status Notifier",
-            action = DiscordWebhook(
-                webhookUrl = variable("secrets.WEBHOOK_URL")
-            ),
-            condition = "always()"
-        )
     }
     job(
         name ="discord-notification",
         runsOn = UbuntuLatest,
         needs = listOf(
             buildJob
-        )
+        ),
     ) {
         uses(
             name = "Discord Workflow Status Notifier",
@@ -145,7 +138,7 @@ class DiscordWebhook(
     val avatarUrl: String? = null,
     val title: String? = null,
     val description: String? = null,
-    val includeDetails: String? = null,
+    val includeDetails: Boolean? = null,
     val colorSuccess: Color? = null,
     val colorFailure: Color? = null,
     val colorCancelled: Color? = null,
@@ -167,7 +160,7 @@ class DiscordWebhook(
                 "description" to it
             },
             includeDetails?.let {
-                "include-details" to it
+                "include-details" to it.toString()
             },
             colorSuccess?.let {
                 "color-success" to "#"+Integer.toHexString(it.rgb).substring(2)
@@ -182,9 +175,15 @@ class DiscordWebhook(
     )
 }
 
+val yaml = workflow.toYaml(addConsistencyCheck = true) +
+        """
+            |
+            |    if: ${variable("always()")}
+        """.trimMargin()
+
 if(args.contains("--save")) {
 //    workflow.writeToFile()
-    workflow.targetFile.writeText(workflow.toYaml(addConsistencyCheck = true) + "\n")
+    workflow.targetFile.writeText(yaml + "\n")
 } else {
-    println(workflow.toYaml(addConsistencyCheck = true))
+    println(yaml)
 }
