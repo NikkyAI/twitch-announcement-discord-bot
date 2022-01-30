@@ -9,6 +9,7 @@ import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
 import it.krzeminski.githubactions.domain.Trigger
 import it.krzeminski.githubactions.dsl.workflow
 import it.krzeminski.githubactions.yaml.toYaml
+import it.krzeminski.githubactions.yaml.writeToFile
 import java.awt.Color
 import java.nio.file.Paths
 import kotlin.io.path.writeText
@@ -175,6 +176,7 @@ class DiscordWebhook(
 }
 
 if(args.contains("--save")) {
+//    workflow.writeToFile()
     workflow.targetFile.writeText(workflow.toYaml(addConsistencyCheck = true) + "\n")
 } else {
     println(workflow.toYaml(addConsistencyCheck = true))
