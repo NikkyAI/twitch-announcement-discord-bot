@@ -2,6 +2,7 @@
 
 @file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.5.0")
 
+import Docker_workflow_main.Util.secret
 import Docker_workflow_main.Util.variable
 import it.krzeminski.githubactions.actions.Action
 import it.krzeminski.githubactions.actions.actions.CheckoutV2
@@ -9,13 +10,13 @@ import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
 import it.krzeminski.githubactions.domain.Trigger
 import it.krzeminski.githubactions.dsl.workflow
 import it.krzeminski.githubactions.yaml.toYaml
-import it.krzeminski.githubactions.yaml.writeToFile
 import java.awt.Color
 import java.nio.file.Paths
 import kotlin.io.path.writeText
 
 object Util {
     fun variable(variable: String): String = "\${{ $variable }}"
+    fun secret(secret: String): String = "\${{ secrets.$secret }}"
     fun dollar(variable: String): String = "\$$variable"
 }
 
@@ -51,8 +52,8 @@ val workflow = workflow(
         uses(
             name = "Docker Login",
             action = DockerLogin(
-                username = variable("secrets.DOCKER_HUB_USERNAME"),
-                password = variable("secrets.DOCKER_HUB_ACCESS_TOKEN"),
+                username = secret("DOCKER_HUB_USERNAME"),
+                password = secret("DOCKER_HUB_ACCESS_TOKEN"),
             )
         )
         uses(
@@ -65,18 +66,19 @@ val workflow = workflow(
             action = DockerBuildPush(
                 context = ".",
                 file = "./Dockerfile",
-                push = false,
-                tags = "${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest",
+                push = true,
+                tags = "${secret("DOCKER_HUB_USERNAME")}/${secret("DOCKER_HUB_REPOSITORY")}:latest",
             )
         )
-        run (
+        run(
             name = "image digest",
-            command = "docker inspect ${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest" +
-                    " | jq -r .[0].ReposDigests[]"
+            command = "echo ${variable("steps.docker_build.outputs.digest")}",
+//            command = "docker inspect ${secret("DOCKER_HUB_USERNAME")}/${secret("DOCKER_HUB_REPOSITORY")}:latest" +
+//                    " | jq -r .[0].Id"
         )
     }
     job(
-        name ="discord-notification",
+        name = "discord-notification",
         runsOn = UbuntuLatest,
         needs = listOf(
             buildJob
@@ -85,12 +87,14 @@ val workflow = workflow(
         uses(
             name = "Discord Workflow Status Notifier",
             action = DiscordWebhook(
-                webhookUrl = variable("secrets.WEBHOOK_URL")
+                webhookUrl = secret("WEBHOOK_URL"),
+                includeDetails = true,
             ),
             condition = "always()"
         )
     }
 }
+
 class CacheV2(
     private val paths: List<String>,
     private val key: String,
@@ -133,7 +137,6 @@ class DockerBuildPush(
 
 class DiscordWebhook(
     val webhookUrl: String,
-    val githubToken: String? = null,
     val username: String? = null,
     val avatarUrl: String? = null,
     val title: String? = null,
@@ -142,6 +145,7 @@ class DiscordWebhook(
     val colorSuccess: Color? = null,
     val colorFailure: Color? = null,
     val colorCancelled: Color? = null,
+    val githubToken: String? = null,
 ) : Action("nobrayner", "discord-webhook", "v1") {
     override fun toYamlArguments(): LinkedHashMap<String, String> = linkedMapOf(
         "github-token" to (githubToken ?: variable("github.token")),
@@ -163,25 +167,57 @@ class DiscordWebhook(
                 "include-details" to it.toString()
             },
             colorSuccess?.let {
-                "color-success" to "#"+Integer.toHexString(it.rgb).substring(2)
+                "color-success" to "#" + Integer.toHexString(it.rgb).substring(2)
             },
             colorFailure?.let {
-                "color-failure" to "#"+Integer.toHexString(it.rgb).substring(2)
+                "color-failure" to "#" + Integer.toHexString(it.rgb).substring(2)
             },
             colorCancelled?.let {
-                "color-cancelled" to "#"+Integer.toHexString(it.rgb).substring(2)
+                "color-cancelled" to "#" + Integer.toHexString(it.rgb).substring(2)
             }
         ).toTypedArray()
     )
 }
 
-val yaml = workflow.toYaml(addConsistencyCheck = true) +
+val yaml = workflow.toYaml(addConsistencyCheck = true)
+    .replaceFirst(
         """
-            |
+            |  "discord-notification":
+        """.trimMargin(),
+        """
+            |  "discord-notification":
             |    if: ${variable("always()")}
         """.trimMargin()
+    )
+    .replaceFirst(
+        """
+            |  push:
+        """.trimMargin(),
+        """
+            |  push:
+            |    branches: [ master, main ]
+        """.trimMargin()
+    )
+    .replaceFirst(
+        """
+            |  pull_request:
+        """.trimMargin(),
+        """
+            |  pull_request:
+            |    branches: [ master, main ]
+        """.trimMargin()
+    )
+    .replaceFirst(
+        """
+            |      - name: Build and push
+        """.trimMargin(),
+        """
+            |      - name: Build and push
+            |        id: docker_build
+        """.trimMargin()
+    )
 
-if(args.contains("--save")) {
+if (args.contains("--save")) {
 //    workflow.writeToFile()
     workflow.targetFile.writeText(yaml + "\n")
 } else {

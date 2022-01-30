@@ -1,10 +1,11 @@
 name: docker build & push
 
 on:
-  push:
-    branches: [ master, main ]
-  pull_request:
-    branches: [ master, main ]
+  workflow_dispatch # manual trigger
+#  push:
+#    branches: [ master, main ]
+#  pull_request:
+#    branches: [ master, main ]
 
 jobs:
   build:
