@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v2
         with:
           paths: |
-          ~/.gradle
+            ~/.gradle
             .gradle
             ~/.docker
           key: ${{ runner.os }}-gradle-cache-${{ github.ref }}-${{ hashFiles('**/build.gradle.kts', 'version.properties') }}
@@ -58,4 +58,4 @@ jobs:
         with:
           github-token: ${{ github.token }}
           discord-webhook: ${{ secrets.WEBHOOK_URL }}
-        if: ${{ always }}
+        if: always()

@@ -52,7 +52,7 @@ jobs:
       with:
         github-token: ${{ github.token }}
         discord-webhook: ${{ secrets.WEBHOOK_URL }}
-      if: ${{ always }}
+      if: always()
 #    - name: Send Webhook Notification
 #      if: always()
 #      env:

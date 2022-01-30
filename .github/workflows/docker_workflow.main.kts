@@ -78,7 +78,7 @@ val workflow = workflow(
             action = DiscordWebhook(
                 webhookUrl = variable("secrets.WEBHOOK_URL")
             ),
-            condition = variable("always")
+            condition = "always()"
         )
     }
 }
@@ -87,7 +87,7 @@ class CacheV2(
     private val key: String,
 ) : Action("actions", "cache", "v2") {
     override fun toYamlArguments() = linkedMapOf(
-        "paths" to "|\n" + paths.joinToString("\n  "),
+        "paths" to "|\n" + paths.joinToString("\n") { "  $it" },
         "key" to key,
     )
 }
