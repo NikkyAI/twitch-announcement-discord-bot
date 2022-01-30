@@ -107,7 +107,7 @@ suspend fun TwitchConfig.role(guildBehavior: GuildBehavior): Role {
     return guildBehavior.getRoleOrNull(role) ?: relayError("role $role could not be loaded")
 }
 
-suspend inline fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageChannel {
+suspend fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageChannel {
     return withContext(
         logContext("guild" to guildBehavior.name)
     ) {
@@ -118,7 +118,7 @@ suspend inline fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageCh
 }
 
 
-suspend inline fun RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
+suspend fun RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
     return withContext(
         logContext("guild" to guildBehavior.name)
     ) {

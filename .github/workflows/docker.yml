@@ -42,19 +42,25 @@ jobs:
         context: ./
         file: ./Dockerfile
         push: true
-        tags: ${{ secrets.DOCKER_HUB_USERNAME }}/discordbot:latest
+        tags: ${{ secrets.DOCKER_HUB_USERNAME }}/twitch-annoucement-discord-bot:latest
 
     - name: Image digest
       run: echo ${{ steps.docker_build.outputs.digest }}
 
-    - name: Send Webhook Notification
-      if: always()
-      env:
-        JOB_STATUS: ${{ job.status }}
-        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-        HOOK_OS_NAME: ${{ runner.os }}
-        WORKFLOW_NAME: ${{ github.workflow }}
-      run: |
-        git clone https://github.com/DiscordHooks/github-actions-discord-webhook.git webhook
-        bash webhook/send.sh $JOB_STATUS $WEBHOOK_URL
-      shell: bash
+    - name: Discord Workflow Status Notifier
+      uses: nobrayner/discord-webhook@v1
+      with:
+        github-token: ${{ github.token }}
+        discord-webhook: ${{ secrets.WEBHOOK_URL }}
+      if: ${{ always }}
+#    - name: Send Webhook Notification
+#      if: always()
+#      env:
+#        JOB_STATUS: ${{ job.status }}
+#        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+#        HOOK_OS_NAME: ${{ runner.os }}
+#        WORKFLOW_NAME: ${{ github.workflow }}
+#      run: |
+#        git clone https://github.com/DiscordHooks/github-actions-discord-webhook.git webhook
+#        bash webhook/send.sh $JOB_STATUS $WEBHOOK_URL
+#      shell: bash

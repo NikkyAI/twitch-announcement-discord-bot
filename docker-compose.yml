@@ -1,28 +1,14 @@
 version: '3.9'
 services:
   discord_bot:
-    image: nikkyai/discordbot:dev
+    image: nikkyai/twitch-annoucement-discord-bot:latest
     environment:
       BOT_TOKEN: "$BOT_TOKEN"
       TWITCH_CLIENT_ID: "$TWITCH_CLIENT_ID"
       TWITCH_CLIENT_SECRET: "$TWITCH_CLIENT_SECRET"
-      SEQ_SERVER: "http://seq:5341"
       CONFIG_DIR: /data
+    restart: unless-stopped
+    user: "1000:1000"
     volumes:
       - ./data:/data
       - ./logs:/logs
-  seq:
-    image: datalust/seq:latest
-#    restart: unless-stopped
-    environment:
-      ACCEPT_EULA: Y
-      SEQ_FIRSTRUN_ADMINPASSWORDHASH: $PH
-    volumes:
-      - seq_data:/data
-    ports:
-      - "5380:80"
-      - "5341:5341"
-
-volumes:
-  seq_data:
-    driver: local

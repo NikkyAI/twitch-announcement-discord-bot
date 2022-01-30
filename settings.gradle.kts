@@ -7,11 +7,11 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version "3.7.1"
+    id("com.gradle.enterprise") version "3.7.1"
 ////                        # available:"3.7.2"
 ////                        # available:"3.8"
 ////                        # available:"3.8.1"
-    id("de.fayard.refreshVersions") version "0.23.0"
+    id("de.fayard.refreshVersions") version "0.23.0"
 ////                            # available:"0.30.0"
 ////                            # available:"0.30.1"
 ////                            # available:"0.30.2"
