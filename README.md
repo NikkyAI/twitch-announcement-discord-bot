@@ -2,8 +2,7 @@
 
 [![Discord](https://img.shields.io/discord/342696338556977153.svg?style=for-the-badge&logo=discord)](https://discord.gg/dQA3rYsYS8)
 [![GitHub issues](https://img.shields.io/github/issues/NikkyAi/discordbot.svg?style=for-the-badge&logo=github)](https://github.com/NikkyAi/discordbot/issues)
-[![GitHub issues](https://img.shields.io/github/issues/NikkyAi/discordbot.svg?style=for-the-badge&logo=github)](https://github.com/NikkyAi/discordbot/issues)
-[![Docker Image Version (latest by date)](https://img.shields.io/docker/v/nikkyai/twitch-annoucement-discord-bot?style=for-the-badge)](https://hub.docker.com/repository/docker/nikkyai/twitch-annoucement-discord-bot)
+[![Docker Image Version (latest by date)](https://img.shields.io/docker/v/nikkyai/twitch-announcement-discord-bot?style=for-the-badge)](https://hub.docker.com/repository/docker/nikkyai/twitch-announcement-discord-bot)
 
 ## twitch notifications
 
@@ -38,9 +37,9 @@ you can add multiple roles to the same section, they will be added to the same m
 
 # run the bot
 
-docker images: https://hub.docker.com/repository/docker/nikkyai/twitch-annoucement-discord-bot
+docker images: https://hub.docker.com/repository/docker/nikkyai/twitch-announcement-discord-bot
 
-see [docker-compose.yml](./docker-compose-sample.yml)
+see [docker-compose.yml](./docker-compose.yml)
 
 # dev setup
 

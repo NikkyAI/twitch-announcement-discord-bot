@@ -28,7 +28,7 @@ val workflow = workflow(
     sourceFile = Paths.get(".github/workflows/docker_workflow.main.kts"),
     targetFile = Paths.get(".github/workflows/docker_workflow.yml"),
 ) {
-    job(name = "build_job", runsOn = UbuntuLatest) {
+    val buildJob = job(name = "build_job", runsOn = UbuntuLatest) {
         run(name = "Print greeting", command = "echo 'Hello world!'")
         uses(
             name = "Check out",
@@ -37,7 +37,7 @@ val workflow = workflow(
             )
         )
         uses(
-            name = "Check out",
+            name = "Cache",
             action = CacheV2(
                 paths = listOf(
                     "~/.gradle",
@@ -58,23 +58,31 @@ val workflow = workflow(
             name = "Docker Setup buildx",
             action = SetupBuildX()
         )
-        val dockerBuild = uses(
+        uses(
             name = "Build and push",
-//            id = "_docker_build_push",
+//            id = "docker_build_push",
             action = DockerBuildPush(
                 context = ".",
                 file = "./Dockerfile",
                 push = false,
-                tags = "${variable("secrets.DOCKER_HUB_USERNAME")}/discordbot:latest",
+                tags = "${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest",
             )
         )
-        run(
+        run (
             name = "image digest",
-//            command ="echo ${dockerBuild.outputsVariable("digest")}",
-            command = "echo ${variable("steps.'${dockerBuild.name}'.outputs.digest")}",
+            command = "docker inspect ${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest" +
+                    " | jq -r .[0].ReposDigests[]"
         )
+    }
+    job(
+        name ="discord-notification",
+        runsOn = UbuntuLatest,
+        needs = listOf(
+            buildJob
+        )
+    ) {
         uses(
-            "Discord Workflow Status Notifier",
+            name = "Discord Workflow Status Notifier",
             action = DiscordWebhook(
                 webhookUrl = variable("secrets.WEBHOOK_URL")
             ),
