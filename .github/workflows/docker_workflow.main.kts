@@ -175,7 +175,7 @@ class DiscordWebhook(
 }
 
 if(args.contains("--save")) {
-    workflow.targetFile.writeText(workflow.toYaml(addConsistencyCheck = true))
+    workflow.targetFile.writeText(workflow.toYaml(addConsistencyCheck = true) + "\n")
 } else {
-    println(workflow.toYaml())
+    println(workflow.toYaml(addConsistencyCheck = true))
 }
