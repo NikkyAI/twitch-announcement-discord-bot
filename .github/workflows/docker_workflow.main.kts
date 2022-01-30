@@ -74,6 +74,13 @@ val workflow = workflow(
             command = "docker inspect ${variable("secrets.DOCKER_HUB_USERNAME")}/${variable("secrets.DOCKER_HUB_REPOSITORY")}:latest" +
                     " | jq -r .[0].ReposDigests[]"
         )
+        uses(
+            name = "Discord Workflow Status Notifier",
+            action = DiscordWebhook(
+                webhookUrl = variable("secrets.WEBHOOK_URL")
+            ),
+            condition = "always()"
+        )
     }
     job(
         name ="discord-notification",
@@ -96,7 +103,7 @@ class CacheV2(
     private val key: String,
 ) : Action("actions", "cache", "v2") {
     override fun toYamlArguments() = linkedMapOf(
-        "paths" to "|\n" + paths.joinToString("\n") { "  $it" },
+        "path" to "|\n" + paths.joinToString("\n") { "  $it" },
         "key" to key,
     )
 }
