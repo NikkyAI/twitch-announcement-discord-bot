@@ -3,28 +3,26 @@ package moe.nikky
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
-import com.kotlindiscord.kord.extensions.commands.converters.impl.role
-import com.kotlindiscord.kord.extensions.commands.converters.impl.string
+import com.kotlindiscord.kord.extensions.commands.converters.impl.*
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.respond
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
 import com.kotlindiscord.kord.extensions.utils.scheduling.Task
-import dev.kord.common.entity.ChannelType
-import dev.kord.common.entity.Permission
-import dev.kord.common.entity.PresenceStatus
-import dev.kord.common.entity.Snowflake
+import dev.kord.common.entity.*
+import dev.kord.common.entity.optional.optional
+import dev.kord.common.toMessageFormat
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.TopGuildMessageChannelBehavior
 import dev.kord.core.behavior.channel.createWebhook
+import dev.kord.core.behavior.createScheduledEvent
 import dev.kord.core.behavior.execute
 import dev.kord.core.behavior.getChannelOfOrNull
+import dev.kord.core.behavior.interaction.edit
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
@@ -40,29 +38,28 @@ import io.klogging.Klogging
 import io.klogging.context.logContext
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.features.*
 import io.ktor.client.features.json.*
 import io.ktor.client.features.json.serializer.*
-import io.ktor.client.request.*
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import io.ktor.client.features.logging.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.*
+import moe.nikky.TwitchApi.getChannelInfo
+import moe.nikky.TwitchApi.getGames
+import moe.nikky.TwitchApi.getLastVOD
+import moe.nikky.TwitchApi.getSchedule
+import moe.nikky.TwitchApi.getStreams
+import moe.nikky.TwitchApi.getToken
+import moe.nikky.TwitchApi.getUsers
 import moe.nikky.checks.hasBotControl
 import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.db.TwitchConfig
 import org.koin.core.component.inject
-import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -70,15 +67,22 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     override val name = "Twitch Notifications"
 
     private val database: DiscordbotDatabase by inject()
-    private var token: Token? = null
-    private var tokenExpiration: Instant = Instant.DISTANT_PAST
+
+    //    private var token: Token? = null
+//    private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
+
+    private val token by lazy {
+        runBlocking {
+            httpClient.getToken()
+        }
+    }
 
     companion object {
         private const val WEBHOOK_NAME = "twitch-notifications"
-        private const val twitchApi = "https://api.twitch.tv/helix"
-        private val clientId = envOrNull("TWITCH_CLIENT_ID")
-        private val clientSecret = envOrNull("TWITCH_CLIENT_SECRET")
+//        private const val twitchApi = "https://api.twitch.tv/helix"
+//        private val clientId = envOrNull("TWITCH_CLIENT_ID")
+//        private val clientSecret = envOrNull("TWITCH_CLIENT_SECRET")
 
         private val requiredPermissions = arrayOf(
             Permission.ViewChannel,
@@ -86,13 +90,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             Permission.SendMessages,
             Permission.ManageMessages,
             Permission.ReadMessageHistory,
+            Permission.ManageEvents,
         )
     }
 
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
+//    private val json = Json {
+//        prettyPrint = true
+//        ignoreUnknownKeys = true
+//    }
 //    private val httpClient = kord.resources.httpClient
 
     private val httpClient = HttpClient(CIO) {
@@ -101,8 +106,17 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 //        install(Logging) {
 //            logger = Logger.DEFAULT
-//            level = LogLevel.INFO
+//            level = LogLevel.ALL
 //        }
+    }
+    private val httpClientVerbose = HttpClient(CIO) {
+        install(JsonFeature) {
+            serializer = KotlinxSerializer()
+        }
+        install(Logging) {
+            logger = Logger.DEFAULT
+            level = LogLevel.ALL
+        }
     }
 
     private val scheduler = Scheduler()
@@ -114,12 +128,16 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         "event" to "TwitchLoop"
                     )
                 ) {
-                    logger.debugF { "checking streams" }
+                    logger.traceF { "checking streams" }
                     val token = httpClient.getToken()
                     if (token != null) {
-                        checkStreams(kord.guilds.toList(), token)
+                        checkStreams(
+                            guilds = kord.guilds.toList(),
+                            token = token
+                        )
                     } else {
                         logger.errorF { "failed to acquire token" }
+                        delay(5.seconds)
                     }
                 }
             } catch (e: Exception) {
@@ -158,6 +176,52 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             name = "channel"
             description = "notification channel, defaults to current channel"
             requireChannelType(ChannelType.GuildText)
+        }
+    }
+
+    inner class TwitchScheduleSyncArgs : Arguments() {
+        val twitchUserName by string {
+            name = "twitch"
+            description = "Twitch username"
+        }
+        val amount by defaultingInt {
+            val validRange = 1..100
+            name = "max"
+            defaultValue = 30
+            description =
+                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue"
+            validate {
+                failIfNot("$value is not in range $validRange") { value in validRange }
+            }
+        }
+    }
+
+    inner class TwitchScheduleDeleteArgs : Arguments() {
+        val twitchUserName by string {
+            name = "twitch"
+            description = "Twitch username"
+        }
+    }
+
+    inner class TwitchScheduleListArgs : Arguments() {
+        val twitchUserName by string {
+            name = "twitch"
+            description = "Twitch username"
+        }
+        val amount by defaultingInt {
+            val validRange = 1..100
+            name = "max"
+            defaultValue = 30
+            description =
+                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue"
+            validate {
+                failIfNot("$value is not in range $validRange") { value in validRange }
+            }
+        }
+        val includeCancelled by defaultingBoolean {
+            name = "includeCancelled"
+            description = "also list cancelled events"
+            defaultValue = false
         }
     }
 
@@ -356,6 +420,239 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     }
                 }
             }
+
+            ephemeralSubCommand(::TwitchScheduleSyncArgs) {
+                name = "schedule-sync"
+                description = "synchronize schedule"
+
+                requireBotPermissions(
+                    Permission.ManageEvents,
+                )
+                check {
+                    hasBotControl(database)
+                }
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val userData = httpClient.getUsers(
+                            logins = listOf(arguments.twitchUserName),
+                            token = token,
+                        )[arguments.twitchUserName]
+                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+
+                        val segments = httpClient.getSchedule(
+                            token = token,
+                            broadcaster_id = userData.id,
+                        ).filter { it.canceledUntil == null && it.vacationCancelledUntil == null }
+                            .take(arguments.amount).toList().distinct()
+
+                        val existingEvents = guild.scheduledEvents
+                            .filter { event -> event.entityType == ScheduledEntityType.External }
+                            .filter { event ->
+                                event.location?.contains("https://twitch.tv/${userData.login}") ?: false
+                            }
+                            .toList()
+
+                        val segmentsWithEvents = segments.associateWith { segment ->
+                            val now = Clock.System.now()
+                            val title = segment.title + (segment.category?.name?.let { " - $it" } ?: "")
+                            existingEvents
+                                .filter { event -> event.name == title }
+                                .filter { event ->
+                                    (event.scheduledStartTime < now && event.status == GuildScheduledEventStatus.Active)
+                                            || (event.scheduledStartTime == segment.startTime && event.status == GuildScheduledEventStatus.Scheduled)
+                                }
+                                .filter { event -> event.scheduledEndTime == segment.endTime }
+                                .filter { event -> event.description?.contains(segment.id) ?: false }
+                                .also {
+                                    if (it.size > 1) {
+                                        this@TwitchNotificationExtension.logger.warnF { "found ${it.size} events for segment $segment" }
+                                    }
+                                }
+                        }
+
+                        val notMatchingEvents = existingEvents
+                            .filter { event -> event.creatorId == this@TwitchNotificationExtension.kord.selfId }
+                            .toSet() - segmentsWithEvents.values.flatten().toSet()
+
+
+                        var followUp = respond {
+                            content = listOfNotNull(
+                                "found ${segments.size} segments",
+                                notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
+                                    "deleting ${it.size} events"
+                                },
+                            ).joinToString("\n")
+                        }
+
+                        notMatchingEvents.forEach {
+                            it.delete()
+                        }
+
+                        val now = Clock.System.now()
+                        val segmentsToCreateEventsFor = segments.filter { segment ->
+                            val existingEventsForSegment = segmentsWithEvents[segment] ?: emptyList()
+                            existingEventsForSegment.isEmpty() && segment.endTime > now
+                        }
+
+                        followUp = followUp.edit {
+                            content = listOfNotNull(
+                                "found ${segments.size} segments",
+                                notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
+                                    "deleted ${it.size} events ✅"
+                                },
+                                segmentsWithEvents.takeIf { it.isNotEmpty() }?.let {
+                                    "creating ${it.size} events ... (this may take about ${((it.size - 5) / 5).minutes}"
+                                },
+                            ).joinToString("\n")
+                        }
+
+                        launch(
+                            this@TwitchNotificationExtension.kord.coroutineContext
+                                    + CoroutineName("events-create-${userData.login}")
+                        ) {
+                            val createdEvents = segmentsToCreateEventsFor.map { segment ->
+                                val startTime = segment.startTime.takeIf { it > now } ?: (now + 5.seconds)
+                                val title = segment.title + (segment.category?.name?.let { " - $it" } ?: "")
+                                guild.createScheduledEvent(
+                                    name = title,
+                                    privacyLevel = GuildScheduledEventPrivacyLevel.GuildOnly,
+                                    scheduledStartTime = startTime,
+                                    entityType = ScheduledEntityType.External,
+                                ) {
+                                    description = """
+                                            automatically created by ${event.interaction.user.mention} at ${now.toMessageFormat()}
+                                            id: ${segment.id}
+                                        """.trimIndent()
+                                    scheduledEndTime = segment.endTime
+                                    entityMetadata = GuildScheduledEventEntityMetadata(
+                                        location = "https://twitch.tv/${userData.login}".optional()
+                                    )
+                                }.also { event ->
+                                    this@TwitchNotificationExtension.logger.infoF { "created event ${event.id} for segment $segment" }
+                                }
+                            }
+
+                            this@TwitchNotificationExtension.logger.infoF { "done creating events" }
+                            followUp.edit {
+                                content = listOfNotNull(
+                                    "found ${segments.size} segments",
+                                    notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
+                                        "deleted ${it.size} events ✅"
+                                    },
+                                    "created ${createdEvents.size}/${segmentsToCreateEventsFor.size} events ✅",
+                                    (segmentsToCreateEventsFor.size - createdEvents.size).takeIf { it > 0 }?.let {
+                                        "failed creating $it events ❌"
+                                    },
+                                )
+                                    .joinToString("\n")
+                                    .also {
+                                        this@TwitchNotificationExtension.logger.infoF { "message: \n$it" }
+                                    }
+                            }
+                            this@TwitchNotificationExtension.logger.infoF { "followup edited" }
+                        }
+
+                    }
+                }
+            }
+
+            ephemeralSubCommand(::TwitchScheduleDeleteArgs) {
+                name = "schedule-delete"
+                description = "delete all events for a twitch user"
+
+                requireBotPermissions(
+                    Permission.ManageEvents,
+                )
+                check {
+                    hasBotControl(database)
+                }
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val userData = httpClient.getUsers(
+                            logins = listOf(arguments.twitchUserName),
+                            token = token,
+                        )[arguments.twitchUserName]
+                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+
+                        val existingEvents = guild.scheduledEvents
+                            .filter { event -> event.entityType == ScheduledEntityType.External }
+                            .filter { event ->
+                                event.location?.contains("https://twitch.tv/${userData.login}") ?: false
+                            }
+                            .toList()
+                        val followUp = respond {
+                            content = """
+                                deleting ${existingEvents.size} events ...
+                            """.trimIndent()
+                        }
+
+                        existingEvents.forEach { it.delete() }
+
+                        followUp.edit {
+                            content = """
+                                deleted ${existingEvents.size} events ✅
+                            """.trimIndent()
+                        }
+                    }
+                }
+            }
+
+            ephemeralSubCommand(::TwitchScheduleListArgs) {
+                name = "schedule-list"
+                description = "list streamer schedule"
+
+                requireBotPermissions(
+                    Permission.ManageEvents,
+                )
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val userData = httpClient.getUsers(
+                            logins = listOf(arguments.twitchUserName),
+                            token = token,
+                        )[arguments.twitchUserName]
+                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+
+                        val segments = httpClient.getSchedule(
+                            token = token,
+                            broadcaster_id = userData.id,
+                        )
+                            .filter { arguments.includeCancelled || (it.canceledUntil == null && it.vacationCancelledUntil == null) }
+                            .take(arguments.amount)
+                            .toList().distinct()
+                            ?: relayError("cannot lookup twitch schedule")
+
+                        segments.forEach {
+                            this@TwitchNotificationExtension.logger.debugF { it }
+                        }
+
+                        if(segments.isNotEmpty()) {
+                            segments.joinToString("\n") { segment ->
+                                val title = segment.title.let {
+                                    if (segment.canceledUntil != null || segment.vacationCancelledUntil != null) {
+                                        "~~$it~~"
+                                    } else {
+                                        it
+                                    }
+                                }
+                                "${segment.startTime.toMessageFormat()}-${segment.endTime.toMessageFormat()} ${title}" +
+                                        (segment.category?.name?.let { " - $it" } ?: "")
+                            }.linesChunkedByMaxLength(2000)
+                                .forEach {
+                                    respond { content = it }
+                                }
+                        } else {
+                            respond {
+                                content = "no schedule segments found"
+                            }
+                        }
+                    }
+                }
+            }
         }
 
 //        event<ReadyEvent> {
@@ -399,7 +696,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         val user = try {
             val token = httpClient.getToken() ?: relayError("cannot get twitch token")
-            val userData = httpClient.getUsers(token, listOf(arguments.twitchUserName))
+            val userData = httpClient.getUsers(
+                token = token,
+                logins = listOf(arguments.twitchUserName)
+            )
                 ?: relayError("cannot fetch user data for <https://twitch.tv/${arguments.twitchUserName}>")
             userData[arguments.twitchUserName.lowercase()]
                 ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
@@ -593,7 +893,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
 
             if (updateMessage) {
-                val vod = httpClient.getLastVOD(token, userData.id)
+                val vod = httpClient.getLastVOD(
+                    userId = userData.id,
+                    token = token,
+                )
                 val message = "<https://twitch.tv/${userData.login}>\n" +
                         if (vod != null) {
                             """
@@ -705,24 +1008,24 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }.associateBy { it.channel.id }
 
         val streamDataMap = httpClient.getStreams(
-            token,
-            mappedTwitchConfigs.values.flatMap {
+            user_logins = mappedTwitchConfigs.values.flatMap {
                 it.map(TwitchConfig::twitchUserName)
-            }.distinct()
+            }.distinct(),
+            token = token,
         ) ?: return@coroutineScope
         val userDataMap = httpClient.getUsers(
-            token,
-            mappedTwitchConfigs.values.flatMap {
+            logins = mappedTwitchConfigs.values.flatMap {
                 it.map(TwitchConfig::twitchUserName)
-            }.distinct()
+            }.distinct(),
+            token = token,
         ) ?: return@coroutineScope
         val gameDataMap = httpClient.getGames(
-            token,
-            streamDataMap.values.map { it.game_name }
+            gameNames = streamDataMap.values.map { it.game_name },
+            token = token,
         ) ?: return@coroutineScope
         val channelInfoMap = httpClient.getChannelInfo(
-            token,
-            userDataMap.values.map { it.id }
+            broadcasterIds = userDataMap.values.map { it.id },
+            token = token,
         ) ?: return@coroutineScope
 
         if (streamDataMap.isNotEmpty()) {
@@ -745,7 +1048,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         mappedTwitchConfigs.entries.chunked(10).forEach { chunk ->
             coroutineScope {
                 chunk.forEach { (guild, twitchConfigs) ->
-                    launch() {
+                    launch {
                         withContext(
                             logContext(
                                 "guild" to guild.name
@@ -760,14 +1063,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                     val streamData = streamDataMap[userData.login.lowercase()]
                                     val gameData = gameDataMap[streamData?.game_name?.lowercase()]
                                     updateTwitchNotificationMessage(
-                                        guild,
-                                        twitchConfig,
-                                        token,
-                                        userData,
-                                        channelInfo,
-                                        streamData,
-                                        gameData,
-                                        webhook
+                                        guild = guild,
+                                        twitchConfig = twitchConfig,
+                                        token = token,
+                                        userData = userData,
+                                        channelInfo = channelInfo,
+                                        streamData = streamData,
+                                        gameData = gameData,
+                                        webhook = webhook
                                     )
                                 }
                             } catch (e: DiscordRelayedException) {
@@ -781,209 +1084,4 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }
     }
-
-    @OptIn(ExperimentalTime::class)
-    private suspend fun HttpClient.getToken(): Token? {
-        token?.let { token ->
-            if ((Clock.System.now() + Duration.minutes(1)) < tokenExpiration) {
-                logger.traceF { "reusing token" }
-                return token
-            }
-        }
-        if (clientId == null || clientSecret == null) return null
-        logger.infoF { "getting new token" }
-        return post<Token>(urlString = "https://id.twitch.tv/oauth2/token") {
-            parameter("client_id", clientId)
-            parameter("client_secret", clientSecret)
-            parameter("grant_type", "client_credentials")
-        }.also {
-            token = it
-            tokenExpiration = Clock.System.now() + Duration.seconds(it.expires_in)
-            logger.infoF { "new token: $token" }
-            logger.infoF { "expiration: $tokenExpiration" }
-        }
-    }
-
-    private suspend fun HttpClient.getStreams(token: Token, user_logins: List<String>): Map<String, StreamData>? {
-        if (clientId == null || clientSecret == null) return null
-        val chunkedList = user_logins.chunked(100)
-        return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "$twitchApi/streams") {
-                chunk.forEach {
-                    parameter("user_login", it)
-                }
-                header("Client-ID", clientId)
-                header("Authorization", "Bearer ${token.access_token}")
-            }.parseData(StreamData.serializer())
-        }.associateBy { it.user_name.lowercase() }
-    }
-
-
-    private suspend fun HttpClient.getUsers(token: Token, logins: List<String>): Map<String, TwitchUserData>? {
-        if (clientId == null || clientSecret == null) return null
-        val chunkedList = logins.chunked(100)
-        return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "$twitchApi/users") {
-                chunk.forEach {
-                    parameter("login", it)
-                }
-                header("Client-ID", clientId)
-                header("Authorization", "Bearer ${token.access_token}")
-            }.parseData(TwitchUserData.serializer())
-        }.associateBy { it.login.lowercase() }
-    }
-
-    private suspend fun HttpClient.getLastVOD(token: Token, userId: String): TwitchVideoData? {
-        if (clientId == null || clientSecret == null) return null
-        return try {
-            get<JsonObject>(urlString = "$twitchApi/videos") {
-                parameter("user_id", userId)
-                parameter("last", "1")
-                header("Client-ID", clientId)
-                header("Authorization", "Bearer ${token.access_token}")
-            }.parseData(TwitchVideoData.serializer()).firstOrNull()
-        } catch (e: ServerResponseException) {
-            logger.errorF { e.message }
-            null
-        }
-    }
-
-    private suspend fun HttpClient.getGames(token: Token, gameNames: List<String>): Map<String, TwitchGameData>? {
-        if (clientId == null || clientSecret == null) return null
-        val chunkedList = gameNames.chunked(100)
-        return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "$twitchApi/games") {
-                chunk.forEach {
-                    parameter("name", it)
-                }
-                header("Client-ID", clientId)
-                header("Authorization", "Bearer ${token.access_token}")
-            }.parseData(TwitchGameData.serializer())
-        }.associateBy { it.name.lowercase() }
-    }
-
-    private suspend fun HttpClient.getChannelInfo(
-        token: Token,
-        broadcasterIds: List<String>,
-    ): Map<String, TwitchChannelInfo>? {
-        if (clientId == null || clientSecret == null) return null
-        val chunkedList = broadcasterIds.chunked(100)
-        return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "$twitchApi/channels") {
-                chunk.forEach {
-                    parameter("broadcaster_id", it)
-                }
-                header("Client-ID", clientId)
-                header("Authorization", "Bearer ${token.access_token}")
-            }.parseData(TwitchChannelInfo.serializer())
-        }.associateBy { it.broadcaster_login.lowercase() }
-    }
-
-    private suspend fun <T> JsonObject.parseData(serializer: KSerializer<T>, key: String = "data"): List<T> {
-        if (this["error"] != null) {
-            logger.errorF { "received: ${json.encodeToString(JsonObject.serializer(), this@parseData)}" }
-            error(this["message"]!!.jsonPrimitive.content)
-        }
-        val array = when (val value = this[key]) {
-            is JsonArray -> value
-            null -> {
-                logger.errorF { "key $key is missing from the twitch response" }
-                return emptyList()
-            }
-            else -> {
-                logger.errorF { "twitch data was not a array" }
-                logger.errorF { json.encodeToString(JsonElement.serializer(), value) }
-                return emptyList()
-            }
-        }
-        return try {
-            json.decodeFromJsonElement(
-                ListSerializer(serializer),
-                array
-            )
-        } catch (e: SerializationException) {
-            logger.errorF(e) {
-                "twitch data failed to parse key $key: \n${
-                    json.encodeToString(JsonElement.serializer(),
-                        array)
-                }"
-            }
-            return emptyList()
-        }
-    }
-
 }
-
-@Serializable
-private data class Token(
-    val access_token: String,
-    val expires_in: Long,
-    val token_type: String,
-)
-
-@Serializable
-private data class StreamData(
-    val id: String,
-    val user_id: String,
-    val user_name: String,
-    val game_id: String,
-    val game_name: String,
-    val type: String,
-    val title: String,
-    val viewer_count: Int,
-    val started_at: Instant,
-    val language: String,
-    val thumbnail_url: String,
-    val tag_ids: List<String>?,
-    val is_mature: Boolean,
-)
-
-@Serializable
-private data class TwitchUserData(
-    val id: String,
-    val login: String,
-    val display_name: String,
-    val description: String,
-    val profile_image_url: String,
-    val offline_image_url: String,
-    val view_count: UInt,
-    val created_at: String,
-)
-
-@Serializable
-private data class TwitchVideoData(
-    val id: String,
-    val stream_id: String,
-    val user_id: String,
-    val user_name: String,
-    val title: String,
-    val description: String,
-    val created_at: Instant,
-    val published_at: Instant,
-    val url: String,
-    val thumbnail_url: String,
-    val viewable: String,
-    val view_count: UInt,
-    val language: String,
-    val type: String,
-    val duration: String,
-)
-
-@Serializable
-private data class TwitchGameData(
-    val box_art_url: String,
-    val id: String,
-    val name: String,
-)
-
-@Serializable
-private data class TwitchChannelInfo(
-    val broadcaster_id: String,
-    val broadcaster_login: String,
-    val broadcaster_name: String,
-    val broadcaster_language: String,
-    val game_id: String,
-    val game_name: String,
-    val title: String,
-    val delay: UInt,
-)

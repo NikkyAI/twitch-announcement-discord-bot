@@ -30,13 +30,14 @@ class BotInfoExtension : Extension(), Klogging {
             Permission.ManageRoles,
             Permission.ManageWebhooks,
             Permission.ReadMessageHistory,
+            Permission.ManageEvents,
         )
         val scopes = listOf(
             "bot",
             "applications.commands"
         )
         URLBuilder("https://discord.com/api/oauth2/authorize").apply {
-            parameters.append("client_id", kord.resources.applicationId.asString)
+            parameters.append("client_id", kord.resources.applicationId.toString())
             parameters.append("permissions", permission.code.value)
             parameters.append("scope", scopes.joinToString(" "))
         }.build().toString().also { inviteUrl ->

@@ -1,13 +1,14 @@
 #!/usr/bin/env kotlin
 
-@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.5.0")
+@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.6.0")
 
 import Docker_workflow_main.Util.secret
 import Docker_workflow_main.Util.variable
 import it.krzeminski.githubactions.actions.Action
 import it.krzeminski.githubactions.actions.actions.CheckoutV2
 import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
-import it.krzeminski.githubactions.domain.Trigger
+import it.krzeminski.githubactions.domain.triggers.PullRequest
+import it.krzeminski.githubactions.domain.triggers.Push
 import it.krzeminski.githubactions.dsl.workflow
 import it.krzeminski.githubactions.yaml.toYaml
 import java.awt.Color
@@ -23,9 +24,12 @@ object Util {
 val workflow = workflow(
     name = "Docker build & push",
     on = listOf(
-        //TODO: add branches
-        Trigger.Push,
-        Trigger.PullRequest
+        Push(
+            branches = listOf("main"),
+        ),
+        PullRequest(
+            branches = listOf("main"),
+        )
     ),
     sourceFile = Paths.get(".github/workflows/docker_workflow.main.kts"),
     targetFile = Paths.get(".github/workflows/docker_workflow.yml"),
@@ -83,6 +87,7 @@ val workflow = workflow(
         needs = listOf(
             buildJob
         ),
+        condition = variable("always()"),
     ) {
         uses(
             name = "Discord Workflow Status Notifier",
@@ -100,7 +105,7 @@ class CacheV2(
     private val key: String,
 ) : Action("actions", "cache", "v2") {
     override fun toYamlArguments() = linkedMapOf(
-        "path" to "|\n" + paths.joinToString("\n") { "  $it" },
+        "path" to paths.joinToString("\n"),
         "key" to key,
     )
 }
@@ -180,33 +185,6 @@ class DiscordWebhook(
 }
 
 val yaml = workflow.toYaml(addConsistencyCheck = true)
-    .replaceFirst(
-        """
-            |  "discord-notification":
-        """.trimMargin(),
-        """
-            |  "discord-notification":
-            |    if: ${variable("always()")}
-        """.trimMargin()
-    )
-    .replaceFirst(
-        """
-            |  push:
-        """.trimMargin(),
-        """
-            |  push:
-            |    branches: [ master, main ]
-        """.trimMargin()
-    )
-    .replaceFirst(
-        """
-            |  pull_request:
-        """.trimMargin(),
-        """
-            |  pull_request:
-            |    branches: [ master, main ]
-        """.trimMargin()
-    )
     .replaceFirst(
         """
             |      - name: Build and push

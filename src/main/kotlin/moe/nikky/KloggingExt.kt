@@ -5,6 +5,7 @@ import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.channel.GuildChannel
 import dev.kord.core.event.Event
+import dev.kord.core.event.interaction.GuildChatInputCommandInteractionCreateEvent
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.context.logContext
 import io.klogging.events.LogEvent

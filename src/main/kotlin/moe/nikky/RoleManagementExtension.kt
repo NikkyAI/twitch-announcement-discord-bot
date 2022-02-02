@@ -275,7 +275,7 @@ class RoleManagementExtension : Extension(), Klogging {
                     }
 
                     roleChoosers.forEach { roleChooserConfig ->
-                        logger.info { "processing role chooser: $roleChooserConfig" }
+                        logger.infoF { "processing role chooser: $roleChooserConfig" }
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
                             val message = roleChooserConfig.getMessageOrRelayError(guild)

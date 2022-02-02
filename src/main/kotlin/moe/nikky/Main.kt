@@ -7,6 +7,7 @@ import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
+import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
 import io.klogging.config.LevelRange
@@ -40,7 +41,66 @@ suspend fun main() {
     System.setProperty("io.ktor.random.secure.random.provider", "DRBG")
     Security.setProperty("securerandom.drbg.config", "HMAC_DRBG,SHA-512,256,pr_and_reseed")
 
+    setupLogging()
 
+    val token = env("BOT_TOKEN")
+
+    if (!dockerLogging) {
+        logger.warnF { "WARN" }
+        logger.errorF { "ERROR" }
+        logger.fatalF { "FATAL" }
+    }
+
+    val bot = ExtensibleBot(token) {
+//        intents {
+//            +Intent.GuildScheduledEvents
+//        }
+
+        chatCommands {
+            defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
+            logger.info { "chat command default prefix: $defaultPrefix" }
+            enabled = true
+        }
+        i18n {
+            defaultLocale = SupportedLocales.ENGLISH
+        }
+        applicationCommands {
+            defaultGuild = TEST_GUILD_ID
+            logger.infoF { "test guild: ${defaultGuild?.asString}" }
+        }
+        extensions {
+            add(::ConfigurationExtension)
+            add(::BotInfoExtension)
+            add(::DiceExtension)
+            add(::RoleManagementExtension)
+            add(::TwitchNotificationExtension)
+            if (TEST_GUILD_ID != null) {
+                add(::TestExtension)
+            }
+            help {
+                enableBundledExtension = true
+                deleteInvocationOnPaginatorTimeout = true
+                deletePaginatorOnTimeout = true
+                pingInReply = true
+            }
+        }
+        presence {
+            status = PresenceStatus.Idle
+            afk = true
+        }
+        hooks {
+            kordShutdownHook = true
+            afterKoinSetup {
+                registerKoinModules()
+            }
+        }
+    }
+
+    logger.infoF { "bot starting" }
+    bot.start()
+}
+
+fun setupLogging() {
     loggingConfiguration {
         if (dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
@@ -93,64 +153,6 @@ suspend fun main() {
             applyFromMinLevel(Level.INFO)
         }
     }
-    val token = env("BOT_TOKEN")
-
-    if (!dockerLogging) {
-        logger.warnF { "WARN" }
-        logger.errorF { "ERROR" }
-        logger.fatalF { "FATAL" }
-    }
-
-    val bot = ExtensibleBot(token) {
-//        intents {
-//            +Intent.GuildWebhooks
-//        }
-
-        chatCommands {
-            defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
-            logger.info { "chat command default prefix: $defaultPrefix" }
-            enabled = true
-        }
-        i18n {
-            defaultLocale = SupportedLocales.ENGLISH
-        }
-        applicationCommands {
-            defaultGuild = TEST_GUILD_ID
-            logger.infoF { "test guild: ${defaultGuild?.asString}" }
-        }
-        extensions {
-            add(::ConfigurationExtension)
-            add(::BotInfoExtension)
-            add(::DiceExtension)
-            add(::RoleManagementExtension)
-            add(::TwitchNotificationExtension)
-            if (TEST_GUILD_ID != null) {
-                add(::TestExtension)
-            }
-            help {
-                enableBundledExtension = true
-                deleteInvocationOnPaginatorTimeout = true
-                deletePaginatorOnTimeout = true
-                pingInReply = true
-            }
-        }
-        presence {
-            status = PresenceStatus.Idle
-            afk = true
-        }
-        hooks {
-            kordShutdownHook = true
-            afterKoinSetup {
-                registerKoinModules()
-            }
-//            beforeExtensionsAdded {
-//
-//            }
-        }
-    }
-
-    logger.infoF { "bot starting" }
-    bot.start()
 }
 
 private fun registerKoinModules() {

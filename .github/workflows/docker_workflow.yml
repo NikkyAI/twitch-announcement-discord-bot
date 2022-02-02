@@ -1,4 +1,4 @@
-# This file was generated using Kotlin DSL (.github/workflows/docker_workflow.main.kts).
+# This file was generated using Kotlin DSL (.github\workflows\docker_workflow.main.kts).
 # If you want to modify the workflow, please change the Kotlin file and regenerate this YAML file.
 # Generated with https://github.com/krzema12/github-actions-kotlin-dsl
 
@@ -6,9 +6,11 @@ name: Docker build & push
 
 on:
   push:
-    branches: [ master, main ]
+    branches:
+      - 'main'
   pull_request:
-    branches: [ master, main ]
+    branches:
+      - 'main'
 
 jobs:
   "check_yaml_consistency":
@@ -19,7 +21,7 @@ jobs:
       - name: Install Kotlin
         run: sudo snap install --classic kotlin
       - name: Consistency check
-        run: diff -u '.github/workflows/docker_workflow.yml' <('.github/workflows/docker_workflow.main.kts')
+        run: diff -u '.github\workflows\docker_workflow.yml' <('.github\workflows\docker_workflow.main.kts')
   "build_job":
     runs-on: "ubuntu-latest"
     needs:
@@ -57,11 +59,11 @@ jobs:
       - name: image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
   "discord-notification":
-    if: ${{ always() }}
     runs-on: "ubuntu-latest"
     needs:
       - "build_job"
       - "check_yaml_consistency"
+    if: ${{ always() }}
     steps:
       - name: Discord Workflow Status Notifier
         uses: nobrayner/discord-webhook@v1

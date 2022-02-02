@@ -5,7 +5,7 @@ import io.klogging.Level
 import io.klogging.context.logContext
 import kotlinx.coroutines.withContext
 
-private val scanStacktrace = true
+private const val scanStacktrace = true
 
 fun getLocation(debug: Boolean = false): String? {
     if (!scanStacktrace) return null
