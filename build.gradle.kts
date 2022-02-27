@@ -50,6 +50,7 @@ dependencies {
 
     implementation(KotlinX.coroutines.core)
     implementation(KotlinX.coroutines.debug)
+//    implementation(KotlinX.serialization.json)
 
     implementation("br.com.colman:dice-helper:_")
 
@@ -63,8 +64,8 @@ dependencies {
     implementation("io.ktor:ktor-client-logging:_")
     implementation("org.slf4j:slf4j-api:_")
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testImplementation(Testing.Junit.jupiter.api)
+    testRuntimeOnly(Testing.Junit.jupiter.engine)
 }
 
 java {

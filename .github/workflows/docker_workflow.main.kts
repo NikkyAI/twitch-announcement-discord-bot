@@ -1,24 +1,27 @@
 #!/usr/bin/env kotlin
 
-@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.6.0")
+@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.9.0")
 
 import Docker_workflow_main.Util.secret
-import Docker_workflow_main.Util.variable
 import it.krzeminski.githubactions.actions.Action
+import it.krzeminski.githubactions.actions.actions.CacheV2
 import it.krzeminski.githubactions.actions.actions.CheckoutV2
+import it.krzeminski.githubactions.actions.docker.BuildPushActionV2
+import it.krzeminski.githubactions.actions.docker.LoginActionV1
+import it.krzeminski.githubactions.actions.docker.SetupBuildxActionV1
 import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
 import it.krzeminski.githubactions.domain.triggers.PullRequest
 import it.krzeminski.githubactions.domain.triggers.Push
 import it.krzeminski.githubactions.dsl.workflow
 import it.krzeminski.githubactions.yaml.toYaml
+import it.krzeminski.githubactions.dsl.expr
 import java.awt.Color
 import java.nio.file.Paths
 import kotlin.io.path.writeText
 
 object Util {
-    fun variable(variable: String): String = "\${{ $variable }}"
-    fun secret(secret: String): String = "\${{ secrets.$secret }}"
-    fun dollar(variable: String): String = "\$$variable"
+    fun secret(secret: String): String = expr("secrets.$secret")
+//    fun dollar(variable: String): String = "\$$variable"
 }
 
 val workflow = workflow(
@@ -35,50 +38,48 @@ val workflow = workflow(
     targetFile = Paths.get(".github/workflows/docker_workflow.yml"),
 ) {
     val buildJob = job(name = "build_job", runsOn = UbuntuLatest) {
-        run(name = "Print greeting", command = "echo 'Hello world!'")
+        run(name = "Print workflow name", command = "echo 'Hello '\$GITHUB_WORKFLOW'!'")
         uses(
             name = "Check out",
             action = CheckoutV2(
-                fetchDepth = CheckoutV2.FetchDepth.Quantity(0)
+                fetchDepth = CheckoutV2.FetchDepth.Value(0)
             )
         )
         uses(
             name = "Cache",
             action = CacheV2(
-                paths = listOf(
+                path = listOf(
                     "~/.gradle",
                     ".gradle",
                     "~/.docker",
                 ),
-                key = "${variable("runner.os")}-gradle-cache-${variable("github.ref")}-${variable("hashFiles('**/build.gradle.kts', 'version.properties')")}"
+                key = "${expr("runner.os")}-gradle-cache-${expr("github.ref")}-${expr("hashFiles('**/build.gradle.kts', 'version.properties')")}"
             )
         )
         uses(
             name = "Docker Login",
-            action = DockerLogin(
+            action = LoginActionV1(
                 username = secret("DOCKER_HUB_USERNAME"),
                 password = secret("DOCKER_HUB_ACCESS_TOKEN"),
             )
         )
         uses(
             name = "Docker Setup buildx",
-            action = SetupBuildX()
+            action = SetupBuildxActionV1()
         )
-        uses(
+        val dockerBuildPush = uses(
             name = "Build and push",
 //            id = "docker_build_push",
-            action = DockerBuildPush(
+            action = BuildPushActionV2(
                 context = ".",
                 file = "./Dockerfile",
                 push = true,
-                tags = "${secret("DOCKER_HUB_USERNAME")}/${secret("DOCKER_HUB_REPOSITORY")}:latest",
+                tags = listOf("${secret("DOCKER_HUB_USERNAME")}/${secret("DOCKER_HUB_REPOSITORY")}:latest"),
             )
         )
         run(
             name = "image digest",
-            command = "echo ${variable("steps.docker_build.outputs.digest")}",
-//            command = "docker inspect ${secret("DOCKER_HUB_USERNAME")}/${secret("DOCKER_HUB_REPOSITORY")}:latest" +
-//                    " | jq -r .[0].Id"
+            command = "echo ${expr(dockerBuildPush.outputs.digest)}",
         )
     }
     job(
@@ -87,7 +88,7 @@ val workflow = workflow(
         needs = listOf(
             buildJob
         ),
-        condition = variable("always()"),
+        condition = expr("always()"),
     ) {
         uses(
             name = "Discord Workflow Status Notifier",
@@ -98,46 +99,6 @@ val workflow = workflow(
             condition = "always()"
         )
     }
-}
-
-class CacheV2(
-    private val paths: List<String>,
-    private val key: String,
-) : Action("actions", "cache", "v2") {
-    override fun toYamlArguments() = linkedMapOf(
-        "path" to paths.joinToString("\n"),
-        "key" to key,
-    )
-}
-
-class DockerLogin(
-    val username: String,
-    val password: String,
-) : Action("docker", "login-action", "v1") {
-    override fun toYamlArguments() = linkedMapOf(
-        "username" to username,
-        "password" to password,
-    )
-}
-
-class SetupBuildX(
-
-) : Action("docker", "setup-buildx-action", "v1") {
-    override fun toYamlArguments() = linkedMapOf<String, String>()
-}
-
-class DockerBuildPush(
-    val context: String,
-    val file: String,
-    val push: Boolean,
-    val tags: String,
-) : Action("docker", "build-push-action", "v2") {
-    override fun toYamlArguments() = linkedMapOf(
-        "context" to context,
-        "file" to file,
-        "push" to push.toString(),
-        "tags" to tags,
-    )
 }
 
 class DiscordWebhook(
@@ -153,7 +114,7 @@ class DiscordWebhook(
     val githubToken: String? = null,
 ) : Action("nobrayner", "discord-webhook", "v1") {
     override fun toYamlArguments(): LinkedHashMap<String, String> = linkedMapOf(
-        "github-token" to (githubToken ?: variable("github.token")),
+        "github-token" to (githubToken ?: expr("github.token")),
         "discord-webhook" to webhookUrl,
         *listOfNotNull(
             username?.let {
@@ -185,19 +146,11 @@ class DiscordWebhook(
 }
 
 val yaml = workflow.toYaml(addConsistencyCheck = true)
-    .replaceFirst(
-        """
-            |      - name: Build and push
-        """.trimMargin(),
-        """
-            |      - name: Build and push
-            |        id: docker_build
-        """.trimMargin()
-    )
 
 if (args.contains("--save")) {
-//    workflow.writeToFile()
     workflow.targetFile.writeText(yaml + "\n")
-} else {
+} else if(args.isEmpty()) {
     println(yaml)
+} else {
+    println("unknown args: ${args.joinToString(" ") {"'$it'"}}")
 }
