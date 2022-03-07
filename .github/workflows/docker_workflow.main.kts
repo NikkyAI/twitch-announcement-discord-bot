@@ -15,6 +15,7 @@ import it.krzeminski.githubactions.domain.triggers.Push
 import it.krzeminski.githubactions.dsl.workflow
 import it.krzeminski.githubactions.yaml.toYaml
 import it.krzeminski.githubactions.dsl.expr
+import it.krzeminski.githubactions.yaml.writeToFile
 import java.awt.Color
 import java.nio.file.Paths
 import kotlin.io.path.writeText
@@ -146,7 +147,7 @@ class DiscordWebhook(
 }
 
 val yaml = workflow.toYaml(addConsistencyCheck = true)
-
+workflow.writeToFile()
 if (args.contains("--save")) {
     workflow.targetFile.writeText(yaml + "\n")
 } else if(args.isEmpty()) {
