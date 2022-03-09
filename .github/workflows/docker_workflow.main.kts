@@ -1,6 +1,6 @@
 #!/usr/bin/env kotlin
 
-@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.9.0")
+@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.10.0")
 
 import Docker_workflow_main.Util.secret
 import it.krzeminski.githubactions.actions.Action
@@ -39,7 +39,6 @@ val workflow = workflow(
     targetFile = Paths.get(".github/workflows/docker_workflow.yml"),
 ) {
     val buildJob = job(name = "build_job", runsOn = UbuntuLatest) {
-        run(name = "Print workflow name", command = "echo 'Hello '\$GITHUB_WORKFLOW'!'")
         uses(
             name = "Check out",
             action = CheckoutV2(
@@ -70,7 +69,6 @@ val workflow = workflow(
         )
         val dockerBuildPush = uses(
             name = "Build and push",
-//            id = "docker_build_push",
             action = BuildPushActionV2(
                 context = ".",
                 file = "./Dockerfile",
@@ -146,12 +144,4 @@ class DiscordWebhook(
     )
 }
 
-val yaml = workflow.toYaml(addConsistencyCheck = true)
-workflow.writeToFile()
-if (args.contains("--save")) {
-    workflow.targetFile.writeText(yaml + "\n")
-} else if(args.isEmpty()) {
-    println(yaml)
-} else {
-    println("unknown args: ${args.joinToString(" ") {"'$it'"}}")
-}
+workflow.writeToFile(addConsistencyCheck = true)
