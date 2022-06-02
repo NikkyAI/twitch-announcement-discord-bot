@@ -3,7 +3,8 @@ package moe.nikky
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import io.klogging.Klogging
 import io.ktor.client.*
-import io.ktor.client.features.*
+import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -19,7 +20,6 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.ExperimentalTime
 
 object TwitchApi : Klogging {
     private const val twitchApi = "https://api.twitch.tv/helix"
@@ -33,7 +33,6 @@ object TwitchApi : Klogging {
         ignoreUnknownKeys = true
     }
 
-    @OptIn(ExperimentalTime::class)
     suspend fun HttpClient.getToken(): Token {
         token?.let { token ->
             if ((Clock.System.now() + 10.minutes) < token.tokenExpiration) {
@@ -43,11 +42,11 @@ object TwitchApi : Klogging {
         }
         if (clientId == null || clientSecret == null) error("clientId or clientSecret are unset")
         logger.infoF { "getting new token" }
-        return post<TwitchToken>(urlString = "https://id.twitch.tv/oauth2/token") {
+        return post(urlString = "https://id.twitch.tv/oauth2/token") {
             parameter("client_id", clientId)
             parameter("client_secret", clientSecret)
             parameter("grant_type", "client_credentials")
-        }.let {
+        }.body<TwitchToken>().let {
             Token(
                 clientId,
                 Clock.System.now() + it.expiresIn.seconds,
@@ -67,15 +66,14 @@ object TwitchApi : Klogging {
     ): Map<String, StreamData> {
         val chunkedList = user_logins.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "${twitchApi}/streams") {
+            get(urlString = "${twitchApi}/streams") {
                 chunk.forEach {
                     parameter("user_login", it)
                 }
                 authHeaders(token ?: getToken())
-            }.parseData(StreamData.serializer())
+            }.body<JsonObject>().parseData(StreamData.serializer())
         }.associateBy { it.user_name.lowercase() }
     }
-
 
     suspend fun HttpClient.getUsers(
         logins: List<String>,
@@ -83,12 +81,12 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchUserData> {
         val chunkedList = logins.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "${twitchApi}/users") {
+            get(urlString = "${twitchApi}/users") {
                 chunk.forEach {
                     parameter("login", it)
                 }
                 authHeaders(token ?: getToken())
-            }.parseData(TwitchUserData.serializer())
+            }.body<JsonObject>().parseData(TwitchUserData.serializer())
         }.associateBy { it.login.lowercase() }
     }
 
@@ -97,11 +95,11 @@ object TwitchApi : Klogging {
         token: Token?,
     ): TwitchVideoData? {
         return try {
-            get<JsonObject>(urlString = "${twitchApi}/videos") {
+            get(urlString = "${twitchApi}/videos") {
                 parameter("user_id", userId)
                 parameter("last", "1")
                 authHeaders(token ?: getToken())
-            }.parseData(TwitchVideoData.serializer()).firstOrNull()
+            }.body<JsonObject>().parseData(TwitchVideoData.serializer()).firstOrNull()
         } catch (e: ServerResponseException) {
             logger.errorF { e.message }
             null
@@ -114,12 +112,12 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchGameData> {
         val chunkedList = gameNames.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "${twitchApi}/games") {
+            get(urlString = "${twitchApi}/games") {
                 chunk.forEach {
                     parameter("name", it)
                 }
                 authHeaders(token ?: getToken())
-            }.parseData(TwitchGameData.serializer())
+            }.body<JsonObject>().parseData(TwitchGameData.serializer())
         }.associateBy { it.name.lowercase() }
     }
 
@@ -129,12 +127,13 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchChannelInfo> {
         val chunkedList = broadcasterIds.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get<JsonObject>(urlString = "${twitchApi}/channels") {
+            get(urlString = "${twitchApi}/channels") {
                 chunk.forEach {
                     parameter("broadcaster_id", it)
                 }
                 authHeaders(token ?: getToken())
-            }.parseData(TwitchChannelInfo.serializer())
+            }.body<JsonObject>()
+                .parseData(TwitchChannelInfo.serializer())
         }.associateBy { it.broadcaster_login.lowercase() }
     }
 
@@ -147,15 +146,15 @@ object TwitchApi : Klogging {
         require(pageSize in 1..25) { "pageSize must be positive and not higher than 25" }
         val segments = requestPages { cursor ->
             try {
-                get<PagedResponse>("${twitchApi}/schedule") {
+                get("${twitchApi}/schedule") {
                     authHeaders(token ?: getToken())
 
                     parameter("broadcaster_id", broadcaster_id)
 
                     parameter("first", pageSize)
                     parameter("after", cursor)
-                }
-            }catch(e: ClientRequestException) {
+                }.body<PagedResponse>()
+            } catch (e: ClientRequestException) {
                 logger.errorF { e.message }
                 null
             }
@@ -168,10 +167,10 @@ object TwitchApi : Klogging {
                 schedule?.segments?.also {
                     logger.debugF { "${it.size} segments in response" }
                 }?.map {
-                    if(schedule.vacation != null) {
-                        if(it.startTime > schedule.vacation.start_time && it.startTime < schedule.vacation.end_time) {
+                    if (schedule.vacation != null) {
+                        if (it.startTime > schedule.vacation.start_time && it.startTime < schedule.vacation.end_time) {
                             it.copy(vacationCancelledUntil = schedule.vacation.end_time)
-                        } else if(it.endTime > schedule.vacation.start_time && it.endTime < schedule.vacation.end_time) {
+                        } else if (it.endTime > schedule.vacation.start_time && it.endTime < schedule.vacation.end_time) {
                             it.copy(vacationCancelledUntil = schedule.vacation.end_time)
                         } else {
                             it
@@ -270,8 +269,10 @@ object TwitchApi : Klogging {
         } catch (e: SerializationException) {
             logger.errorF(e) {
                 "twitch data failed to parse key $key: \n${
-                    json.encodeToString(JsonElement.serializer(),
-                        array)
+                    json.encodeToString(
+                        JsonElement.serializer(),
+                        array
+                    )
                 }"
             }
             return emptyList()

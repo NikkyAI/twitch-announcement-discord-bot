@@ -22,7 +22,7 @@ import dev.kord.core.behavior.channel.createWebhook
 import dev.kord.core.behavior.createScheduledEvent
 import dev.kord.core.behavior.execute
 import dev.kord.core.behavior.getChannelOfOrNull
-import dev.kord.core.behavior.interaction.edit
+import dev.kord.core.behavior.interaction.followup.edit
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.Webhook
@@ -38,9 +38,9 @@ import io.klogging.Klogging
 import io.klogging.context.logContext
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.features.json.*
-import io.ktor.client.features.json.serializer.*
-import io.ktor.client.features.logging.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
@@ -101,8 +101,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //    private val httpClient = kord.resources.httpClient
 
     private val httpClient = HttpClient(CIO) {
-        install(JsonFeature) {
-            serializer = KotlinxSerializer()
+        install(ContentNegotiation) {
+            json()
         }
 //        install(Logging) {
 //            logger = Logger.DEFAULT
@@ -110,8 +110,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //        }
     }
     private val httpClientVerbose = HttpClient(CIO) {
-        install(JsonFeature) {
-            serializer = KotlinxSerializer()
+        install(ContentNegotiation) {
+            json()
         }
         install(Logging) {
             logger = Logger.DEFAULT

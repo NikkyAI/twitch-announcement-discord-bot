@@ -14,15 +14,13 @@ import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
-import dev.kord.core.firstOrNull
 import dev.kord.rest.request.KtorRequestException
-import io.klogging.context.LogContext
 import io.klogging.context.logContext
 import io.klogging.logger
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import moe.nikky.db.*
-import mu.withLoggingContext
 import java.io.File
 import java.sql.SQLException
 

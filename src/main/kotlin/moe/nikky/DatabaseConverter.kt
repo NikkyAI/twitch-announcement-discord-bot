@@ -10,7 +10,6 @@ import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
-import dev.kord.core.firstOrNull
 import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
 import io.klogging.Level
@@ -18,6 +17,7 @@ import io.klogging.config.loggingConfiguration
 import io.klogging.logger
 import io.klogging.sending.STDOUT
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable

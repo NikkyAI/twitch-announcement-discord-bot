@@ -2,18 +2,18 @@ package moe.nikky
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.features.*
-import io.ktor.client.features.json.*
-import io.ktor.client.features.json.serializer.*
-import io.ktor.client.features.logging.*
+import io.ktor.client.plugins.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import moe.nikky.TwitchApi.getSchedule
 import moe.nikky.TwitchApi.getToken
 
 private val httpClient = HttpClient(CIO) {
-    install(JsonFeature) {
-        serializer = KotlinxSerializer()
+    install(ContentNegotiation) {
+        json()
     }
     install(Logging) {
         logger = Logger.DEFAULT
