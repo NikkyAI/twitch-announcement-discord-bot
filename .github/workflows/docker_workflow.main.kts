@@ -4,7 +4,6 @@
 @file:Repository("https://jitpack.io")
 @file:DependsOn("com.github.nikkyai:github-actions-kotlin-dsl:9b41062015")
 
-import it.krzeminski.githubactions.actions.actions.CacheV3
 import it.krzeminski.githubactions.actions.actions.CheckoutV3
 import it.krzeminski.githubactions.actions.docker.*
 import it.krzeminski.githubactions.actions.nobrayner.DiscordWebhookV1
@@ -32,17 +31,6 @@ val workflow = workflow(
             name = "Check out",
             action = CheckoutV3(
                 fetchDepth = CheckoutV3.FetchDepth.Value(0)
-            )
-        )
-        uses(
-            name = "Cache",
-            action = CacheV3(
-                path = listOf(
-                    "~/.gradle",
-                    ".gradle",
-                    "~/.docker",
-                ),
-                key = "${expr("runner.os")}-gradle-cache-${expr("github.ref")}-${expr("hashFiles('**/build.gradle.kts', 'version.properties')")}"
             )
         )
         uses(
