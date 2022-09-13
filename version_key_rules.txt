@@ -4,6 +4,9 @@ com.kotlindiscord.kord.extensions:*
 dev.kord.x:emoji
     ^^^^^^.^^^^^
 
+dev.kord.cache:cache-map
+    ^^^^.      ^^^^^^^^^
+
 io.github.microutils:kotlin-logging
                      ^^^^^^^^^^^^^^
 

@@ -8,9 +8,7 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.getJumpUrl
-import com.kotlindiscord.kord.extensions.utils.getLocale
-import com.kotlindiscord.kord.extensions.utils.respond
+import com.kotlindiscord.kord.extensions.utils.*
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
 import com.kotlindiscord.kord.extensions.utils.scheduling.Task
 import dev.kord.common.entity.*
@@ -720,7 +718,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             message = null
         )
 
-        return "added ${user.display_name} <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+        return "added `${user.display_name}` <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
     }
 
     private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
@@ -807,6 +805,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         webhook: Webhook,
     ) {
         val channel = twitchConfig.channel(guild)
+        logger.traceF { "updating ${twitchConfig.twitchUserName} in ${channel.name}" }
         when (channel) {
             is TextChannel, is NewsChannel -> {
             }
@@ -817,12 +816,12 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 
         suspend fun updateMessageId(message: Message, publish: Boolean = true) {
-            if (publish && channel is NewsChannel) {
+            if (publish && channel is NewsChannel && !message.isPublished) {
                 try {
                     logger.infoF { "publishing in ${channel.name}" }
-                    channel.getMessage(message.id).publish()
+                    message.publish()
                 } catch (e: KtorRequestException) {
-                    logger.errorF { "failed to publish" }
+                    logger.errorF(e) { "failed to publish" }
                 }
             }
             database.twitchConfigQueries.updateMessage(
@@ -838,6 +837,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         } ?: findMessage(channel, userData, webhook)?.also { foundMessage ->
             updateMessageId(foundMessage, publish = false)
         }
+        logger.traceF { "old message is ${oldMessage}" }
+        logger.traceF { "stream title: ${streamData?.title}" }
         if (streamData != null) {
             // live
             if (oldMessage != null) {
@@ -855,10 +856,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         oldEmbed.title != streamData.title -> true
                         oldEmbed.footer?.text != streamData.game_name -> true
                         oldEmbed.timestamp != streamData.started_at -> true
-                        else -> false
+                        else -> true // false
                     }
                     if (editMessage) {
-                        val messageId = kord.rest.webhook.editWebhookMessage(
+                        logger.traceF { "editing message ${oldMessage.id}" }
+                        val updatedMessage = kord.rest.webhook.editWebhookMessage(
                             webhook.id,
                             webhook.token!!,
                             oldMessage.id
@@ -867,8 +869,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             embed {
                                 buildEmbed(userData, streamData, gameData)
                             }
-                        }.id
-                        val message = channel.getMessage(messageId)
+                        }
+                        val message = channel.getMessage(updatedMessage.id)
                         updateMessageId(message, publish = true)
                     }
                     return
@@ -947,7 +949,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 channel.lastMessageId ?: run {
                     logger.warn { "last message id was null, channel might be empty" }
                     return null
-                 },
+                },
                 100
             ).filter { message ->
 //                val author = message.data.author
@@ -1060,38 +1062,44 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         mappedTwitchConfigs.entries.chunked(10).forEach { chunk ->
             coroutineScope {
                 chunk.forEach chunkLoop@{ (guild, twitchConfigs) ->
-                    launch(
-                        Dispatchers.IO + logContext(
-                            "guild" to guild.name
-                        )
-                    ) {
+                    launch(Dispatchers.IO) {
                         twitchConfigs.forEach configLoop@{ twitchConfig ->
-                            try {
-                                val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@configLoop
-                                val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
-                                val webhook = webhooks[twitchConfig.channel] ?: return@configLoop
-                                val streamData = streamDataMap[userData.login.lowercase()]
-                                val gameData = gameDataMap[streamData?.game_name?.lowercase()]
-                                withTimeout(15.seconds) {
-                                    updateTwitchNotificationMessage(
-                                        guild = guild,
-                                        twitchConfig = twitchConfig,
-                                        token = token,
-                                        userData = userData,
-                                        channelInfo = channelInfo,
-                                        streamData = streamData,
-                                        gameData = gameData,
-                                        webhook = webhook
-                                    )
+                            val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@configLoop
+                            val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
+                            val webhook = webhooks[twitchConfig.channel] ?: return@configLoop
+                            val streamData = streamDataMap[userData.login.lowercase()]
+                            val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+
+                            withContext(
+                                logContext(
+                                    "twitch" to userData.login,
+                                    "guild" to guild.name,
+                                )
+                            ) {
+                                try {
+                                    withTimeout(15.seconds) {
+                                        updateTwitchNotificationMessage(
+                                            guild = guild,
+                                            twitchConfig = twitchConfig,
+                                            token = token,
+                                            userData = userData,
+                                            channelInfo = channelInfo,
+                                            streamData = streamData,
+                                            gameData = gameData,
+                                            webhook = webhook
+                                        )
+                                    }
+                                } catch (e: TimeoutCancellationException) {
+                                    logger.errorF(e) { "timed out updating ${twitchConfig.twitchUserName} $twitchConfig" }
+                                } catch (e: CancellationException) {
+                                    logger.errorF(e) { "cancellation while updating ${twitchConfig.twitchUserName} $twitchConfig" }
+                                } catch (e: DiscordRelayedException) {
+                                    logger.errorF(e) { e.reason }
+                                } catch (e: KtorRequestException) {
+                                    logger.errorF(e) { "request exception when updating $twitchConfig" }
+                                } catch (e: Exception) {
+                                    logger.errorF(e) { e.message }
                                 }
-                            } catch (e: TimeoutCancellationException) {
-                                logger.errorF(e) { "timed out updating ${twitchConfig.twitchUserName} $twitchConfig" }
-                            } catch (e: CancellationException) {
-                                logger.errorF(e) { "cancellation while updating ${twitchConfig.twitchUserName} $twitchConfig" }
-                            } catch (e: DiscordRelayedException) {
-                                logger.errorF(e) { e.reason }
-                            } catch (e: Exception) {
-                                logger.errorF(e) { e.message }
                             }
                         }
                     }
