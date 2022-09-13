@@ -79,7 +79,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     companion object {
-        private const val WEBHOOK_NAME = "twitch-notifications"
+        private const val WEBHOOK_NAME_PREFIX = "twitch-notifications"
 //        private const val twitchApi = "https://api.twitch.tv/helix"
 //        private val clientId = envOrNull("TWITCH_CLIENT_ID")
 //        private val clientSecret = envOrNull("TWITCH_CLIENT_SECRET")
@@ -757,16 +757,17 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     private suspend fun getWebhook(channel: TopGuildMessageChannelBehavior): Webhook? {
         return try {
             webhooksCache.getOrPut(channel.id) {
+                val webhookName = WEBHOOK_NAME_PREFIX + "-" + kord.getSelf().username
                 channel.webhooks.firstOrNull {
-                    it.name == WEBHOOK_NAME
+                    it.name == webhookName && it.token != null
                 }?.also { webhook ->
                     logger.traceF { "found webhook" }
                     webhooksCache[channel.id] = webhook
-                } ?: channel.createWebhook(name = WEBHOOK_NAME) {
-                    @Suppress("BlockingMethodInNonBlockingContext")
+                } ?: channel.createWebhook(name = webhookName) {
                     avatar = Image.raw(
-                        data = TwitchNotificationExtension::class.java.getResourceAsStream("/twitch/TwitchGlitchPurple.png")
-                            ?.readAllBytes() ?: error("failed to read bytes"),
+                        data = TwitchNotificationExtension::class.java
+                            .getResourceAsStream("/twitch/TwitchGlitchPurple.png")
+                            ?.readBytes() ?: error("failed to read bytes"),
                         format = Image.Format.PNG,
                     )
                 }.also { webhook ->
@@ -879,7 +880,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
             }
             // was offline, creating new message and deleting old message
-            val message = webhook.execute(webhook.token!!) {
+            val webhookToken = webhook.token ?: error("failed to load token from webhook")
+            val message = webhook.execute(webhookToken) {
                 username = userData.display_name
                 avatarUrl = userData.profile_image_url
                 content =
