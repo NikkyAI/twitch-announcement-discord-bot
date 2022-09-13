@@ -805,7 +805,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         webhook: Webhook,
     ) {
         val channel = twitchConfig.channel(guild)
-        logger.traceF { "updating ${twitchConfig.twitchUserName} in ${channel.name}" }
+//        logger.traceF { "updating ${twitchConfig.twitchUserName} in ${channel.name}" }
         when (channel) {
             is TextChannel, is NewsChannel -> {
             }
@@ -837,8 +837,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         } ?: findMessage(channel, userData, webhook)?.also { foundMessage ->
             updateMessageId(foundMessage, publish = false)
         }
-        logger.traceF { "old message is ${oldMessage}" }
-        logger.traceF { "stream title: ${streamData?.title}" }
         if (streamData != null) {
             // live
             if (oldMessage != null) {
@@ -859,7 +857,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         else -> true // false
                     }
                     if (editMessage) {
-                        logger.traceF { "editing message ${oldMessage.id}" }
                         val updatedMessage = kord.rest.webhook.editWebhookMessage(
                             webhook.id,
                             webhook.token!!,
