@@ -13,14 +13,17 @@ group = "moe.nikky"
 version = "1.0-SNAPSHOT"
 
 repositories {
+    google()
     mavenCentral()
-    maven(url = "https://maven.kotlindiscord.com/repository/maven-public/") {
-        name = "kotlindiscord"
+    maven {
+        name = "Sonatype Snapshots"
+        url = uri("https://oss.sonatype.org/content/repositories/snapshots")
     }
-    maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
-        name = "oss-sonatype"
+
+    maven {
+        name = "Kotlin Discord"
+        url = uri("https://maven.kotlindiscord.com/repository/maven-public/")
     }
-//    mavenLocal()
 }
 
 application {

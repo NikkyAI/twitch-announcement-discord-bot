@@ -7,9 +7,8 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version "3.10.1"
-////                        # available:"3.10.2"
-    id("de.fayard.refreshVersions") version "0.40.2"
+    id("com.gradle.enterprise") version "3.11.1"
+    id("de.fayard.refreshVersions") version "0.50.1"
 }
 
 refreshVersions {
@@ -29,4 +28,4 @@ gradleEnterprise {
     }
 }
 
-rootProject.name = "discordbot"
+rootProject.name = "twitch-announcement-discordbot"

@@ -121,7 +121,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
     private val scheduler = Scheduler()
     private val task: Task =
-        scheduler.schedule(seconds = 15, startNow = true, pollingSeconds = 1, name = "Twitch Loop") {
+        scheduler.schedule(
+            delay = 15.seconds,
+            startNow = true,
+            pollingSeconds = 1,
+            name = "Twitch Loop",
+            repeat = true,
+        ) {
+//            logger.infoF { "starting twitch loop" }
             try {
                 withContext(
                     logContext(
@@ -630,7 +637,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             this@TwitchNotificationExtension.logger.debugF { it }
                         }
 
-                        if(segments.isNotEmpty()) {
+                        if (segments.isNotEmpty()) {
                             segments.joinToString("\n") { segment ->
                                 val title = segment.title.let {
                                     if (segment.canceledUntil != null || segment.vacationCancelledUntil != null) {
@@ -704,8 +711,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             userData[arguments.twitchUserName.lowercase()]
                 ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
         } catch (e: IllegalStateException) {
-            relayError(e.message
-                ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>")
+            relayError(
+                e.message
+                    ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>"
+            )
         }
 
         database.twitchConfigQueries.upsert(
@@ -805,6 +814,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         when (channel) {
             is TextChannel, is NewsChannel -> {
             }
+
             else -> {
                 logger.errorF { "channel: ${channel.name} is not a Text or News channel" }
             }
@@ -939,18 +949,20 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             channel.getMessagesBefore(
                 channel.lastMessageId ?: return null,
                 100
-            ).filter { message ->
+            ).firstOrNull { message ->
 //                val author = message.data.author
                 val author = message.author ?: run {
                     logger.warnF { "author was null, messageId: ${message.id}" }
-                    return@filter false
+                    return@firstOrNull false
                 }
                 logger.traceF { "author: $author" }
                 author.id == webhook.id && author.username == userData.display_name
-
-            }.firstOrNull()
+            }
         } catch (e: NullPointerException) {
             logger.errorF(e) { "failed to find old message" }
+            null
+        } catch (e: IndexOutOfBoundsException) {
+            logger.errorF(e) { "how the fuck.. ?" }
             null
         }
     }
@@ -1012,21 +1024,21 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 it.map(TwitchConfig::twitchUserName)
             }.distinct(),
             token = token,
-        ) ?: return@coroutineScope
+        )
         val userDataMap = httpClient.getUsers(
             logins = mappedTwitchConfigs.values.flatMap {
                 it.map(TwitchConfig::twitchUserName)
             }.distinct(),
             token = token,
-        ) ?: return@coroutineScope
+        )
         val gameDataMap = httpClient.getGames(
             gameNames = streamDataMap.values.map { it.game_name },
             token = token,
-        ) ?: return@coroutineScope
+        )
         val channelInfoMap = httpClient.getChannelInfo(
             broadcasterIds = userDataMap.values.map { it.id },
             token = token,
-        ) ?: return@coroutineScope
+        )
 
         if (streamDataMap.isNotEmpty()) {
             val userName = streamDataMap.values.random().user_name
@@ -1034,11 +1046,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 1 -> userName
                 else -> "$userName and ${streamDataMap.size - 1} More"
             }
+            logger.traceF { "updating presence with '$message'" }
             kord.editPresence {
                 status = PresenceStatus.Online
                 watching(message)
             }
         } else {
+            logger.traceF { "setting presence to afk" }
             kord.editPresence {
                 status = PresenceStatus.Idle
                 afk = true
@@ -1048,20 +1062,19 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         mappedTwitchConfigs.entries.chunked(10).forEach { chunk ->
             coroutineScope {
                 chunk.forEach { (guild, twitchConfigs) ->
-                    launch {
-                        withContext(
-                            logContext(
-                                "guild" to guild.name
-                            )
-                        ) {
+                    launch(
+                        Dispatchers.IO + logContext(
+                            "guild" to guild.name
+                        )
+                    ) {
+                        twitchConfigs.forEach { twitchConfig ->
                             try {
-                                twitchConfigs.forEach { twitchConfig ->
-                                    val userData =
-                                        userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@withContext
-                                    val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@withContext
-                                    val webhook = webhooks[twitchConfig.channel] ?: return@withContext
-                                    val streamData = streamDataMap[userData.login.lowercase()]
-                                    val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+                                val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@forEach
+                                val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@forEach
+                                val webhook = webhooks[twitchConfig.channel] ?: return@forEach
+                                val streamData = streamDataMap[userData.login.lowercase()]
+                                val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+                                withTimeout(5.seconds) {
                                     updateTwitchNotificationMessage(
                                         guild = guild,
                                         twitchConfig = twitchConfig,
@@ -1073,8 +1086,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                         webhook = webhook
                                     )
                                 }
+                            } catch (e: TimeoutCancellationException) {
+                                logger.errorF(e) { "timed out updating ${twitchConfig.twitchUserName} $twitchConfig" }
                             } catch (e: DiscordRelayedException) {
-                                logger.errorF { e.cause }
+                                logger.errorF(e) { e.reason }
                             } catch (e: Exception) {
                                 logger.errorF(e) { e.message }
                             }

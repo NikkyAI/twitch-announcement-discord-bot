@@ -66,7 +66,7 @@ suspend fun main() {
         }
         applicationCommands {
             defaultGuild = TEST_GUILD_ID
-            logger.infoF { "test guild: ${defaultGuild?.asString}" }
+            logger.infoF { "test guild: ${defaultGuild}" }
         }
         extensions {
             add(::ConfigurationExtension)

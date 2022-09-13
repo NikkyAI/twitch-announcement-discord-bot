@@ -27,6 +27,12 @@ import java.sql.SQLException
 private val logger = logger("moe.nikky.ConfigExtensions")
 
 fun DiscordbotDatabase.Companion.load(): DiscordbotDatabase = runBlocking {
+    try {
+        Class.forName("org.sqlite.JDBC")
+    } catch (e: ClassNotFoundException) {
+        logger.errorF(e) { "could not load sqlite classes" }
+    }
+
     val configFolder = File(envOrNull("CONFIG_DIR") ?: "data")
     val configFile = configFolder.resolve("config.db")
     val driver: SqlDriver = JdbcSqliteDriver("jdbc:sqlite:${configFile.path.replace('\\','/')}")
