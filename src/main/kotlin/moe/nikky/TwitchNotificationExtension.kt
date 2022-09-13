@@ -1048,13 +1048,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 1 -> userName
                 else -> "$userName and ${streamDataMap.size - 1} More"
             }
-            logger.traceF { "updating presence with '$message'" }
             kord.editPresence {
                 status = PresenceStatus.Online
                 watching(message)
             }
         } else {
-            logger.traceF { "setting presence to afk" }
             kord.editPresence {
                 status = PresenceStatus.Idle
                 afk = true
