@@ -128,7 +128,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             name = "Twitch Loop",
             repeat = true,
         ) {
-//            logger.infoF { "starting twitch loop" }
             try {
                 withContext(
                     logContext(
@@ -150,13 +149,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             } catch (e: Exception) {
                 logger.errorF(e) { "failed in twitch loop" }
             } finally {
-                restartTask()
+                delay(15.seconds)
             }
         }
-
-    private fun restartTask() {
-        task.restart()
-    }
 
     inner class TwitchAddArgs : Arguments() {
         val role by role {
@@ -949,19 +944,22 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         logger.debugF { "searching for message with author '${userData.display_name}' in '${channel.name}' webhook: ${webhook.id}" }
         return try {
             channel.getMessagesBefore(
-                channel.lastMessageId ?: return null,
+                channel.lastMessageId ?: run {
+                    logger.warn { "last message id was null, channel might be empty" }
+                    return null
+                 },
                 100
-            ).firstOrNull { message ->
+            ).filter { message ->
 //                val author = message.data.author
                 val author = message.author ?: run {
                     logger.warnF { "author was null, messageId: ${message.id}" }
-                    return@firstOrNull false
+                    return@filter false
                 }
                 logger.traceF { "author: $author" }
                 author.id == webhook.id && author.username == userData.display_name
-            }
+            }.firstOrNull()
         } catch (e: NullPointerException) {
-            logger.errorF(e) { "failed to find old message" }
+            logger.errorF(e) { "error while trying to find old message" }
             null
         } catch (e: IndexOutOfBoundsException) {
             logger.errorF(e) { "how the fuck.. ?" }
@@ -1061,20 +1059,20 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         mappedTwitchConfigs.entries.chunked(10).forEach { chunk ->
             coroutineScope {
-                chunk.forEach { (guild, twitchConfigs) ->
+                chunk.forEach chunkLoop@{ (guild, twitchConfigs) ->
                     launch(
                         Dispatchers.IO + logContext(
                             "guild" to guild.name
                         )
                     ) {
-                        twitchConfigs.forEach { twitchConfig ->
+                        twitchConfigs.forEach configLoop@{ twitchConfig ->
                             try {
-                                val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@forEach
-                                val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@forEach
-                                val webhook = webhooks[twitchConfig.channel] ?: return@forEach
+                                val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@configLoop
+                                val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
+                                val webhook = webhooks[twitchConfig.channel] ?: return@configLoop
                                 val streamData = streamDataMap[userData.login.lowercase()]
                                 val gameData = gameDataMap[streamData?.game_name?.lowercase()]
-                                withTimeout(5.seconds) {
+                                withTimeout(15.seconds) {
                                     updateTwitchNotificationMessage(
                                         guild = guild,
                                         twitchConfig = twitchConfig,
@@ -1088,6 +1086,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                 }
                             } catch (e: TimeoutCancellationException) {
                                 logger.errorF(e) { "timed out updating ${twitchConfig.twitchUserName} $twitchConfig" }
+                            } catch (e: CancellationException) {
+                                logger.errorF(e) { "cancellation while updating ${twitchConfig.twitchUserName} $twitchConfig" }
                             } catch (e: DiscordRelayedException) {
                                 logger.errorF(e) { e.reason }
                             } catch (e: Exception) {
