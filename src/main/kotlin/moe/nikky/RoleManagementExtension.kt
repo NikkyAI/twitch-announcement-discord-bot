@@ -8,7 +8,6 @@ import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChanne
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
@@ -97,77 +96,6 @@ class RoleManagementExtension : Extension(), Klogging {
 
     @OptIn(ExperimentalTime::class)
     override suspend fun setup() {
-        chatGroupCommand {
-            name = "role"
-            description = "Add or remove roles"
-            requireBotPermissions(Permission.ManageRoles)
-
-            chatCommand(::AddRoleArg) {
-                name = "add"
-                description = "adds a new reaction to role mapping"
-
-                check {
-                    hasBotControl(database, event.getLocale())
-                    guildFor(event)?.asGuild()?.botHasPermissions(
-                        Permission.ManageRoles
-                    )
-                }
-
-                requireBotPermissions(
-                    *requiredPermissions
-                )
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val responseMessage = add(
-                            guild,
-                            arguments,
-                            event.message.channel
-                        )
-
-                        val response = event.message.respond {
-                            content = responseMessage
-                        }
-                        event.message.delete()
-                        launch {
-                            delay(30_000)
-                            response.delete()
-                        }
-                    }
-                }
-            }
-            chatCommand(::RemoveRoleArg) {
-                name = "remove"
-                description = "removes a role mapping"
-
-                check {
-                    hasBotControl(database, event.getLocale())
-                }
-
-                requireBotPermissions(
-                    *requiredPermissions
-                )
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val responseMessage = remove(
-                            guild,
-                            arguments,
-                            event.message.channel
-                        )
-
-                        val response = event.message.respond {
-                            content = responseMessage
-                        }
-                        event.message.delete()
-                        launch {
-                            delay(30_000)
-                            response.delete()
-                        }
-                    }
-                }
-            }
-        }
         ephemeralSlashCommand {
             name = "role"
             description = "Add or remove roles"

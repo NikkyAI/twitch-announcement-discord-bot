@@ -5,7 +5,6 @@ import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.*
 import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.chatGroupCommand
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.*
@@ -226,74 +225,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     override suspend fun setup() {
-        chatGroupCommand {
-            name = "twitch"
-            description = "be notified about more streamers"
-
-            chatCommand(::TwitchAddArgs) {
-                name = "add"
-                description = "be notified about more streamers"
-                locking = true
-
-                check {
-                    hasBotControl(database, event.getLocale())
-                }
-
-                requireBotPermissions(
-                    *requiredPermissions
-                )
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val responseMessage = add(
-                            guild,
-                            arguments,
-                            event.message.channel,
-                        )
-
-                        val response = event.message.respond {
-                            content = responseMessage
-                        }
-                        event.message.delete()
-                        launch {
-                            delay(30_000)
-                            response.delete()
-                        }
-                    }
-                }
-            }
-            chatCommand(::TwitchRemoveArgs) {
-                name = "remove"
-                description = "removes a streamer from notifications"
-
-                check {
-                    hasBotControl(database, event.getLocale())
-                }
-
-                requireBotPermissions(
-                    Permission.ManageMessages
-                )
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val responseMessage = remove(
-                            guild,
-                            arguments,
-                            event.message.channel,
-                        )
-
-                        val response = event.message.respond {
-                            content = responseMessage
-                        }
-                        event.message.delete()
-                        launch {
-                            delay(30_000)
-                            response.delete()
-                        }
-                    }
-                }
-
-            }
-        }
         ephemeralSlashCommand {
             name = "twitch"
             description = "twitch notifications"
@@ -816,14 +747,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 
         suspend fun updateMessageId(message: Message, publish: Boolean = true) {
-            if (publish && channel is NewsChannel && !message.isPublished) {
-                try {
-                    logger.infoF { "publishing in ${channel.name}" }
-                    message.publish()
-                } catch (e: KtorRequestException) {
-                    logger.errorF(e) { "failed to publish" }
-                }
-            }
+//            if (publish && channel is NewsChannel && !message.isPublished) {
+//                try {
+//                    logger.infoF { "publishing in ${channel.name}" }
+//                    message.publish()
+//                } catch (e: KtorRequestException) {
+//                    logger.errorF(e) { "failed to publish" }
+//                }
+//            }
             database.twitchConfigQueries.updateMessage(
                 message = message.id,
                 guildId = guild.id,
@@ -868,7 +799,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             }
                         }
                         val message = channel.getMessage(updatedMessage.id)
-                        updateMessageId(message, publish = true)
+                        updateMessageId(message, publish = false)
                     }
                     return
                 }

@@ -31,7 +31,6 @@ val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
 
 val dockerLogging = envOrNull("DOCKER_LOGGING") == "true"
 
-@OptIn(ExperimentalTime::class)
 @ExperimentalCoroutinesApi
 @PrivilegedIntent
 suspend fun main() {
@@ -52,15 +51,6 @@ suspend fun main() {
     }
 
     val bot = ExtensibleBot(token) {
-//        intents {
-//            +Intent.GuildScheduledEvents
-//        }
-
-        chatCommands {
-            defaultPrefix = envOrNull("COMMAND_PREFIX") ?: ";"
-            logger.info { "chat command default prefix: $defaultPrefix" }
-            enabled = true
-        }
         i18n {
             defaultLocale = SupportedLocales.ENGLISH
         }

@@ -37,33 +37,6 @@ class TestExtension : Extension(), Klogging {
     }
 
     override suspend fun setup() {
-        chatCommand(::SlapArgs) {
-            name = "slap"
-            description = "Get slapped!"
-
-            // Make sure the command didn't come from a webhook - the command will only run or be
-            // shown in the help command when this returns `true`, and it'll be ignored otherwise
-            check {
-                failIf { this.event.member == null }
-            }
-//            requireBotPermissions(Permission.ViewChannel)
-
-            action {  // Now `arguments` here will contain an instance of our arguments class
-                // Because of the DslMarker annotation KordEx uses, we need to grab Kord explicitly
-                val kord = this@TestExtension.kord
-
-                // Don't slap ourselves, slap the person that ran the command!
-                val realTarget = if (arguments.target?.id == kord.selfId) {
-                    user!!
-                } else {
-                    arguments.target ?: user!!
-                }
-
-                this.message.respond {
-                    content = "*slaps ${realTarget.mention} with ${arguments.weapon.message}*"
-                }
-            }
-        }
         publicSlashCommand(::SlapArgs) {
             name = "slap"
             description = "Get slapped!"
