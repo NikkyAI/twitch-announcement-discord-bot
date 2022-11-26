@@ -1,8 +1,6 @@
 #!/usr/bin/env kotlin
 
-//@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.10.0")
-@file:Repository("https://jitpack.io")
-@file:DependsOn("com.github.nikkyai:github-actions-kotlin-dsl:9b41062015")
+@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.28.0")
 
 import it.krzeminski.githubactions.actions.actions.CheckoutV3
 import it.krzeminski.githubactions.actions.docker.*
@@ -10,8 +8,8 @@ import it.krzeminski.githubactions.actions.nobrayner.DiscordWebhookV1
 import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
 import it.krzeminski.githubactions.domain.triggers.PullRequest
 import it.krzeminski.githubactions.domain.triggers.Push
+import it.krzeminski.githubactions.dsl.expressions.expr
 import it.krzeminski.githubactions.dsl.workflow
-import it.krzeminski.githubactions.dsl.expr
 import it.krzeminski.githubactions.yaml.writeToFile
 
 val workflow = workflow(
@@ -24,9 +22,13 @@ val workflow = workflow(
             branches = listOf("main"),
         )
     ),
-    sourceFile = __FILE__,
+    sourceFile = __FILE__.toPath(),
 ) {
-    val buildJob = job(id = "build_job", name = "Build Job", runsOn = UbuntuLatest) {
+    val buildJob = job(
+        id = "build_job",
+        name = "Build Job",
+        runsOn = UbuntuLatest
+    ) {
         uses(
             name = "Check out",
             action = CheckoutV3(
