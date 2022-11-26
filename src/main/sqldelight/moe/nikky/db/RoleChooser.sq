@@ -31,6 +31,19 @@ getAll:
     WHERE guildId=?
   ;
 
+delete:
+  DELETE FROM roleChooserConfig
+  WHERE guildId=?
+    AND section=?
+    AND channel=?
+  ;
+
+updateSection:
+    UPDATE roleChooserConfig
+    SET section=?
+    WHERE roleChooserId=?
+  ;
+
 getAllFromChannel:
   SELECT *
     FROM roleChooserConfig

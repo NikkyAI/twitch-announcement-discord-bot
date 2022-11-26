@@ -99,6 +99,22 @@ class RoleManagementExtension : Extension(), Klogging {
         }
     }
 
+    inner class RenameSectionArg : Arguments() {
+        val oldSection by string {
+            name = "old"
+            description = "OLD Section Title"
+        }
+        val newSection by string {
+            name = "section"
+            description = "NEW Section Title"
+        }
+        val channel by optionalChannel {
+            name = "channel"
+            description = "channel"
+            requireChannelType(ChannelType.GuildText)
+        }
+    }
+
     @OptIn(ExperimentalTime::class)
     override suspend fun setup() {
         ephemeralSlashCommand {
@@ -135,6 +151,7 @@ class RoleManagementExtension : Extension(), Klogging {
                     }
                 }
             }
+
             ephemeralSubCommand(::ListRoleArg) {
                 name = "list"
                 description = "lists all "
@@ -153,6 +170,36 @@ class RoleManagementExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         val responseMessage = list(
+                            guild,
+                            arguments,
+                            event.interaction.channel
+                        )
+
+                        respond {
+                            content = responseMessage
+                        }
+                    }
+                }
+            }
+
+            ephemeralSubCommand(::RenameSectionArg) {
+                name = "update-section"
+                description = "to fix a mistyped section name or such"
+
+                check {
+                    hasBotControl(database)
+                    guildFor(event)?.asGuild()?.botHasPermissions(
+                        Permission.ManageRoles
+                    )
+                }
+
+                requireBotPermissions(
+                    *requiredPermissions
+                )
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage = renameSection(
                             guild,
                             arguments,
                             event.interaction.channel
@@ -292,9 +339,11 @@ class RoleManagementExtension : Extension(), Klogging {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
-        val roleChooserConfig = database.roleChooserQueries.find(guildId = guild.id,
+        val roleChooserConfig = database.roleChooserQueries.find(
+            guildId = guild.id,
             section = arguments.section,
-            channel = channel.id).executeAsOneOrNull()
+            channel = channel.id
+        ).executeAsOneOrNull()
             ?: run {
                 database.roleChooserQueries.upsert(
                     guildId = guild.id,
@@ -303,9 +352,11 @@ class RoleManagementExtension : Extension(), Klogging {
                     channel = channel.id,
                     message = channel.createMessage("placeholder").id
                 )
-                database.roleChooserQueries.find(guildId = guild.id,
+                database.roleChooserQueries.find(
+                    guildId = guild.id,
                     section = arguments.section,
-                    channel = channel.id).executeAsOneOrNull()
+                    channel = channel.id
+                ).executeAsOneOrNull()
                     ?: relayError("failed to create database entry")
             }
 
@@ -387,15 +438,28 @@ class RoleManagementExtension : Extension(), Klogging {
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
-        val roleChooserConfig = database.roleChooserQueries.find(guildId = guild.id,
+        val roleChooserConfig = database.roleChooserQueries.find(
+            guildId = guild.id,
             section = arguments.section,
-            channel = channel.id).executeAsOneOrNull()
+            channel = channel.id
+        ).executeAsOneOrNull()
             ?: relayError("no roleselection section ${arguments.section}")
 
         logger.infoF { "reaction: '${arguments.reaction}'" }
         val reactionEmoji = arguments.reaction
 
         val roleMapping = database.getRoleMapping(guild, roleChooserConfig)
+        if (roleMapping.isEmpty()) {
+            database.roleChooserQueries.delete(
+                guildId = guild.id,
+                section = arguments.section,
+                channel = channel.id
+            )
+            val message = roleChooserConfig.getMessageOrRelayError(guild)
+            message?.delete()
+
+            return "removed role section"
+        }
         val removedRole = roleMapping[reactionEmoji] ?: relayError("no role exists for ${reactionEmoji.mention}")
 
         val message = roleChooserConfig.getMessageOrRelayError(guild)
@@ -423,17 +487,89 @@ class RoleManagementExtension : Extension(), Klogging {
                 member.removeRole(removedRole.id)
             }
         message.asMessage().deleteReaction(reactionEmoji)
+
+        val newRoleMapping = database.getRoleMapping(guild, roleChooserConfig)
+        if (newRoleMapping.isEmpty()) {
+            database.roleChooserQueries.delete(
+                guildId = guild.id,
+                section = arguments.section,
+                channel = channel.id
+            )
+            message.delete()
+
+            return "removed role section"
+        }
         return "removed role"
+    }
+
+    private suspend fun renameSection(
+        guild: Guild,
+        arguments: RenameSectionArg,
+        currentChannel: ChannelBehavior,
+    ): String {
+        val kord = this@RoleManagementExtension.kord
+        val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
+            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
+        }
+
+        run {
+            val shouldNotExist = database.roleChooserQueries.find(
+                guildId = guild.id,
+                section = arguments.newSection,
+                channel = channel.id,
+            ).executeAsOneOrNull()
+
+            if (shouldNotExist != null) {
+                relayError("section ${arguments.newSection} already exists")
+            }
+        }
+
+        val roleChooserConfig = database.roleChooserQueries.find(
+            guildId = guild.id,
+            section = arguments.oldSection,
+            channel = channel.id
+        ).executeAsOneOrNull()
+            ?: relayError("no roleselection section ${arguments.oldSection}")
+
+        val message = roleChooserConfig.getMessageOrRelayError(guild)
+            ?: channel.createMessage("placeholder for section ${arguments.newSection}")
+
+        database.roleChooserQueries.updateSection(
+            section = arguments.newSection,
+            roleChooserId = roleChooserConfig.roleChooserId,
+        )
+        val newRoleChooserConfig = database.roleChooserQueries.find(
+            guildId = guild.id,
+            section = arguments.newSection,
+            channel = channel.id
+        ).executeAsOneOrNull()
+            ?: relayError("no roleselection section ${arguments.newSection}")
+
+        val newRoleMapping = database.getRoleMapping(
+            guild,
+            roleChooser = newRoleChooserConfig
+        )
+
+        message.edit {
+            content = buildMessage(
+                guild,
+                newRoleChooserConfig,
+                newRoleMapping,
+            )
+            logger.infoF { "new message content: \n$content\n" }
+        }
+
+        return "renamed section"
     }
 
     private suspend fun buildMessage(
         guildBehavior: GuildBehavior,
         roleChooserConfig: RoleChooserConfig,
         roleMapping: Map<ReactionEmoji, Role>,
-    ) = "**${roleChooserConfig.section}**: \n" + roleMapping.entries.joinToString(
-        "\n") { (reactionEmoji, role) ->
-        "${reactionEmoji.mention} `${role.name}`"
-    }
+    ) = "**${roleChooserConfig.section}** : \n" + roleMapping.entries
+        .joinToString("\n") { (reactionEmoji, role) ->
+            "${reactionEmoji.mention} `${role.name}`"
+        }
 
     @OptIn(KordPreview::class)
     private suspend fun startOnReaction(
