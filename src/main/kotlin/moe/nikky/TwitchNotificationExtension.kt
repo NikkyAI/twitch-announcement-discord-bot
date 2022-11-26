@@ -101,6 +101,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         install(ContentNegotiation) {
             json()
         }
+        engine {
+            requestTimeout = 15_000
+            endpoint {
+                connectTimeout = 5_000
+                connectAttempts = 5
+            }
+        }
 //        install(Logging) {
 //            logger = Logger.DEFAULT
 //            level = LogLevel.ALL
@@ -113,6 +120,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         install(Logging) {
             logger = Logger.DEFAULT
             level = LogLevel.ALL
+        }
+        engine {
+            requestTimeout = 15_000
+            endpoint {
+                connectTimeout = 5_000
+                connectAttempts = 5
+            }
         }
     }
 

@@ -11,10 +11,7 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.botHasPermissions
-import com.kotlindiscord.kord.extensions.utils.getLocale
-import com.kotlindiscord.kord.extensions.utils.respond
-import com.kotlindiscord.kord.extensions.utils.translate
+import com.kotlindiscord.kord.extensions.utils.*
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.Permission
@@ -78,6 +75,14 @@ class RoleManagementExtension : Extension(), Klogging {
         }
     }
 
+    inner class ListRoleArg : Arguments() {
+        val channel by optionalChannel {
+            name = "channel"
+            description = "channel"
+            requireChannelType(ChannelType.GuildText)
+        }
+    }
+
     inner class RemoveRoleArg : Arguments() {
         val section by string {
             name = "section"
@@ -119,6 +124,35 @@ class RoleManagementExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         val responseMessage = add(
+                            guild,
+                            arguments,
+                            event.interaction.channel
+                        )
+
+                        respond {
+                            content = responseMessage
+                        }
+                    }
+                }
+            }
+            ephemeralSubCommand(::ListRoleArg) {
+                name = "list"
+                description = "lists all "
+
+                check {
+                    hasBotControl(database)
+                    guildFor(event)?.asGuild()?.botHasPermissions(
+                        Permission.ManageRoles
+                    )
+                }
+
+                requireBotPermissions(
+                    *requiredPermissions
+                )
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val responseMessage = list(
                             guild,
                             arguments,
                             event.interaction.channel
@@ -307,6 +341,40 @@ class RoleManagementExtension : Extension(), Klogging {
         )
 
         return "added new role mapping ${reactionEmoji.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
+    }
+
+    private suspend fun list(
+        guild: Guild,
+        arguments: ListRoleArg,
+        currentChannel: ChannelBehavior,
+    ): String {
+        val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
+            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
+        }
+
+        val roleChoosers = database.roleChooserQueries.getAllFromChannel(
+            guildId = guild.id,
+            channel = channel.id,
+        ).executeAsList()
+
+        return roleChoosers.map { roleChooserConfig ->
+            val message = roleChooserConfig.getMessageOrRelayError(guild)
+
+            val newRoleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
+
+            val mappings = newRoleMapping.map { (k, v) ->
+                "\n  ${k.mention} => ${v.mention}"
+            }.joinToString("")
+
+            listOf(
+                "section: `${roleChooserConfig.section}`",
+                "description: ${roleChooserConfig.description}",
+                "mapping: $mappings",
+                "message: ${message?.getJumpUrl()}",
+            ).joinToString("\n")
+        }.joinToString("\n\n")
+
+//        return "added new role mapping ${reactionEmoji.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
     }
 
     private suspend fun remove(
