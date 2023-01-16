@@ -61,10 +61,10 @@ object TwitchApi : Klogging {
     }
 
     suspend fun HttpClient.getStreams(
-        user_logins: List<String>,
+        userLogins: List<String>,
         token: Token? = null,
     ): Map<String, StreamData> {
-        val chunkedList = user_logins.chunked(100)
+        val chunkedList = userLogins.chunked(100)
         return chunkedList.flatMap { chunk ->
             get(urlString = "${twitchApi}/streams") {
                 chunk.forEach {
@@ -72,7 +72,7 @@ object TwitchApi : Klogging {
                 }
                 authHeaders(token ?: getToken())
             }.body<JsonObject>().parseData(StreamData.serializer())
-        }.associateBy { it.user_name.lowercase() }
+        }.associateBy { it.userName.lowercase() }
     }
 
     suspend fun HttpClient.getUsers(
@@ -134,12 +134,12 @@ object TwitchApi : Klogging {
                 authHeaders(token ?: getToken())
             }.body<JsonObject>()
                 .parseData(TwitchChannelInfo.serializer())
-        }.associateBy { it.broadcaster_login.lowercase() }
+        }.associateBy { it.broadcasterLogin.lowercase() }
     }
 
     @OptIn(FlowPreview::class)
     suspend fun HttpClient.getSchedule(
-        broadcaster_id: String,
+        broadcasterId: String,
         pageSize: Int = 20,
         token: Token?,
     ): Flow<TwitchScheduleSegment> {
@@ -149,7 +149,7 @@ object TwitchApi : Klogging {
                 get("${twitchApi}/schedule") {
                     authHeaders(token ?: getToken())
 
-                    parameter("broadcaster_id", broadcaster_id)
+                    parameter("broadcaster_id", broadcasterId)
 
                     parameter("first", pageSize)
                     parameter("after", cursor)
@@ -168,10 +168,10 @@ object TwitchApi : Klogging {
                     logger.debugF { "${it.size} segments in response" }
                 }?.map {
                     if (schedule.vacation != null) {
-                        if (it.startTime > schedule.vacation.start_time && it.startTime < schedule.vacation.end_time) {
-                            it.copy(vacationCancelledUntil = schedule.vacation.end_time)
-                        } else if (it.endTime > schedule.vacation.start_time && it.endTime < schedule.vacation.end_time) {
-                            it.copy(vacationCancelledUntil = schedule.vacation.end_time)
+                        if (it.startTime > schedule.vacation.startTime && it.startTime < schedule.vacation.endTime) {
+                            it.copy(vacationCancelledUntil = schedule.vacation.endTime)
+                        } else if (it.endTime > schedule.vacation.startTime && it.endTime < schedule.vacation.endTime) {
+                            it.copy(vacationCancelledUntil = schedule.vacation.endTime)
                         } else {
                             it
                         }
@@ -198,10 +198,10 @@ object TwitchApi : Klogging {
                 } else {
                     null
                 }
-                response?.let { response ->
+                response?.let { r ->
                     logger.debugF { "getting pagedResponse" }
-                    logger.debugF { "data: ${response?.data}" }
-                    logger.debugF { "pagination: ${response?.pagination}" }
+                    logger.debugF { "data: ${r.data}" }
+                    logger.debugF { "pagination: ${r.pagination}" }
                 }
 
                 emit(response)
@@ -308,46 +308,67 @@ data class TwitchToken(
 @Serializable
 data class StreamData(
     val id: String,
-    val user_id: String,
-    val user_name: String,
-    val game_id: String,
-    val game_name: String,
+    @SerialName("user_id")
+    val userId: String,
+    @SerialName("user_name")
+    val userName: String,
+    @SerialName("game_id")
+    val gameId: String,
+    @SerialName("game_name")
+    val gameName: String,
     val type: String,
     val title: String,
-    val viewer_count: Int,
-    val started_at: Instant,
+    @SerialName("viewer_count")
+    val viewerCount: Int,
+    @SerialName("started_at")
+    val startedAt: Instant,
     val language: String,
-    val thumbnail_url: String,
-    val tag_ids: List<String>?,
-    val is_mature: Boolean,
+    @SerialName("thumbnail_url")
+    val thumbnailUrl: String,
+    @SerialName("tag_ids")
+    val tagIds: List<String>?,
+    @SerialName("is_mature")
+    val isMature: Boolean,
 )
 
 @Serializable
 data class TwitchUserData(
     val id: String,
     val login: String,
-    val display_name: String,
+    @SerialName("display_name")
+    val displayName: String,
     val description: String,
-    val profile_image_url: String,
-    val offline_image_url: String,
-    val view_count: UInt,
-    val created_at: String,
+    @SerialName("profile_image_url")
+    val profileImageUrl: String,
+    @SerialName("offline_image_url")
+    val offlineImageUrl: String,
+    @SerialName("view_count")
+    val viewCount: UInt,
+    @SerialName("created_at")
+    val createdAt: String,
 )
 
 @Serializable
 data class TwitchVideoData(
     val id: String,
-    val stream_id: String,
-    val user_id: String,
-    val user_name: String,
+    @SerialName("stream_id")
+    val streamId: String,
+    @SerialName("user_id")
+    val userId: String,
+    @SerialName("user_name")
+    val userName: String,
     val title: String,
     val description: String,
-    val created_at: Instant,
-    val published_at: Instant,
+    @SerialName("created_at")
+    val createdAt: Instant,
+    @SerialName("published_at")
+    val publishedAt: Instant,
     val url: String,
-    val thumbnail_url: String,
+    @SerialName("thumbnail_url")
+    val thumbnailUrl: String,
     val viewable: String,
-    val view_count: UInt,
+    @SerialName("view_count")
+    val viewCount: UInt,
     val language: String,
     val type: String,
     val duration: String,
@@ -355,19 +376,26 @@ data class TwitchVideoData(
 
 @Serializable
 data class TwitchGameData(
-    val box_art_url: String,
+    @SerialName("box_art_url")
+    val boxArtUrl: String,
     val id: String,
     val name: String,
 )
 
 @Serializable
 data class TwitchChannelInfo(
-    val broadcaster_id: String,
-    val broadcaster_login: String,
-    val broadcaster_name: String,
-    val broadcaster_language: String,
-    val game_id: String,
-    val game_name: String,
+    @SerialName("broadcaster_id")
+    val broadcasterId: String,
+    @SerialName("broadcaster_login")
+    val broadcasterLogin: String,
+    @SerialName("broadcaster_name")
+    val broadcasterName: String,
+    @SerialName("broadcaster_language")
+    val broadcasterLanguage: String,
+    @SerialName("game_id")
+    val gameId: String,
+    @SerialName("game_name")
+    val gameName: String,
     val title: String,
     val delay: UInt,
 )
@@ -398,8 +426,10 @@ data class TwitchSchedule(
 
 @Serializable
 data class TwitchScheduleVacation(
-    val start_time: Instant,
-    val end_time: Instant,
+    @SerialName("start_time")
+    val startTime: Instant,
+    @SerialName("end_time")
+    val endTime: Instant,
 )
 
 @Serializable

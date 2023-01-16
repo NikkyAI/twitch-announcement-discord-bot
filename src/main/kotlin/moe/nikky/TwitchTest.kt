@@ -27,7 +27,7 @@ suspend fun main() {
     val token = httpClient.getToken()
     val segments = httpClient.getSchedule(
         token = token,
-        broadcaster_id = "23507712"
+        broadcasterId = "23507712"
     ).take(1000).toList()
 
     println(segments.size)

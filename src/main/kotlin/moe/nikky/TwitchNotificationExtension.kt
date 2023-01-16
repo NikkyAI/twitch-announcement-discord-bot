@@ -232,7 +232,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }
         val includeCancelled by defaultingBoolean {
-            name = "includeCancelled"
+            name = "include-cancelled"
             description = "also list cancelled events"
             defaultValue = false
         }
@@ -388,7 +388,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                         val segments = httpClient.getSchedule(
                             token = token,
-                            broadcaster_id = userData.id,
+                            broadcasterId = userData.id,
                         ).filter { it.canceledUntil == null && it.vacationCancelledUntil == null }
                             .take(arguments.amount).toList().distinct()
 
@@ -564,7 +564,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
                         val segments = httpClient.getSchedule(
                             token = token,
-                            broadcaster_id = userData.id,
+                            broadcasterId = userData.id,
                         )
                             .filter { arguments.includeCancelled || (it.canceledUntil == null && it.vacationCancelledUntil == null) }
                             .take(arguments.amount)
@@ -663,7 +663,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             message = null
         )
 
-        return "added `${user.display_name}` <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+        return "added `${user.displayName}` <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
     }
 
     private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
@@ -797,8 +797,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         oldEmbed == null -> true
                         oldMessage.content != messageContent -> true
                         oldEmbed.title != streamData.title -> true
-                        oldEmbed.footer?.text != streamData.game_name -> true
-                        oldEmbed.timestamp != streamData.started_at -> true
+                        oldEmbed.footer?.text != streamData.gameName -> true
+                        oldEmbed.timestamp != streamData.startedAt -> true
                         else -> true // false
                     }
                     if (editMessage) {
@@ -821,8 +821,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             // was offline, creating new message and deleting old message
             val webhookToken = webhook.token ?: error("failed to load token from webhook")
             val message = webhook.execute(webhookToken) {
-                username = userData.display_name
-                avatarUrl = userData.profile_image_url
+                username = userData.displayName
+                avatarUrl = userData.profileImageUrl
                 content =
                     "<https://twitch.tv/${userData.login}> \n ${twitchConfig.role(guild).mention}"
                 embed {
@@ -853,13 +853,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             """
                             <${vod.url}>
                             **${vod.title}**
-                            ${channelInfo.game_name}
+                            ${channelInfo.gameName}
                             """.trimIndent()
                         } else {
                             """
                             _VOD url not available_
                             **${channelInfo.title}**
-                            ${channelInfo.game_name}
+                            ${channelInfo.gameName}
                             """.trimIndent()
                         }
                 val messageId = if (oldMessage != null) {
@@ -870,8 +870,8 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     channel.getMessage(messageId)
                 } else {
                     webhook.execute(webhook.token!!) {
-                        username = userData.display_name
-                        avatarUrl = userData.profile_image_url
+                        username = userData.displayName
+                        avatarUrl = userData.profileImageUrl
                         content = message
                     }
                 }
@@ -885,7 +885,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         userData: TwitchUserData,
         webhook: Webhook,
     ): Message? {
-        logger.debugF { "searching for message with author '${userData.display_name}' in '${channel.name}' webhook: ${webhook.id}" }
+        logger.debugF { "searching for message with author '${userData.displayName}' in '${channel.name}' webhook: ${webhook.id}" }
         return try {
             channel.getMessagesBefore(
                 channel.lastMessageId ?: run {
@@ -900,7 +900,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     return@filter false
                 }
                 logger.traceF { "author: $author" }
-                author.id == webhook.id && author.username == userData.display_name
+                author.id == webhook.id && author.username == userData.displayName
             }.firstOrNull()
         } catch (e: NullPointerException) {
             logger.errorF(e) { "error while trying to find old message" }
@@ -919,21 +919,21 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         author {
             name = usersData.login
             url = "https://twitch.tv/${usersData.login}"
-            icon = usersData.profile_image_url
+            icon = usersData.profileImageUrl
         }
         url = "https://twitch.tv/${usersData.login}"
         title = streamData.title
-        timestamp = streamData.started_at
+        timestamp = streamData.startedAt
         if (gameData != null) {
             footer {
                 text = gameData.name
-                icon = gameData.box_art_url
+                icon = gameData.boxArtUrl
                     .replace("{height}", "16")
                     .replace("{width}", "16")
             }
         } else {
             footer {
-                text = streamData.game_name
+                text = streamData.gameName
             }
         }
     }
@@ -964,7 +964,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }.associateBy { it.channel.id }
 
         val streamDataMap = httpClient.getStreams(
-            user_logins = mappedTwitchConfigs.values.flatMap {
+            userLogins = mappedTwitchConfigs.values.flatMap {
                 it.map(TwitchConfig::twitchUserName)
             }.distinct(),
             token = token,
@@ -976,7 +976,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             token = token,
         )
         val gameDataMap = httpClient.getGames(
-            gameNames = streamDataMap.values.map { it.game_name },
+            gameNames = streamDataMap.values.map { it.gameName },
             token = token,
         )
         val channelInfoMap = httpClient.getChannelInfo(
@@ -985,7 +985,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         )
 
         if (streamDataMap.isNotEmpty()) {
-            val userName = streamDataMap.values.random().user_name
+            val userName = streamDataMap.values.random().userName
             val message = when (streamDataMap.size) {
                 1 -> userName
                 else -> "$userName and ${streamDataMap.size - 1} More"
@@ -1010,7 +1010,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
                             val webhook = webhooks[twitchConfig.channel] ?: return@configLoop
                             val streamData = streamDataMap[userData.login.lowercase()]
-                            val gameData = gameDataMap[streamData?.game_name?.lowercase()]
+                            val gameData = gameDataMap[streamData?.gameName?.lowercase()]
 
                             withContext(
                                 logContext(
