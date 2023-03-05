@@ -1,16 +1,19 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.ExtensibleBot
+import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.i18n.SupportedLocales
+import com.kotlindiscord.kord.extensions.modules.extra.phishing.extPhishing
+import com.kotlindiscord.kord.extensions.modules.extra.pluralkit.extPluralKit
+import com.kotlindiscord.kord.extensions.storage.StorageType
+import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.utils.env
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
-import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
 import io.klogging.Level
-import io.klogging.config.LevelRange
 import io.klogging.config.LoggingConfig
 import io.klogging.config.loggingConfiguration
 import io.klogging.config.seq
@@ -19,6 +22,9 @@ import io.klogging.sending.STDOUT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.debug.DebugProbes
 import moe.nikky.db.DiscordbotDatabase
+import moe.nikky.twitch.TwitchNotificationExtension
+import org.koin.core.qualifier.Qualifier
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import java.io.File
 import java.security.Security
@@ -43,6 +49,7 @@ suspend fun main() {
     setupLogging()
 
     val token = env("BOT_TOKEN")
+    val fileLogger = logger
 
     if (!dockerLogging) {
         logger.warnF { "WARN" }
@@ -73,6 +80,10 @@ suspend fun main() {
                 deletePaginatorOnTimeout = true
                 pingInReply = true
             }
+            extPhishing {
+                appName = "Yuno"
+            }
+            extPluralKit()
         }
         presence {
             status = PresenceStatus.Idle
@@ -90,17 +101,20 @@ suspend fun main() {
     bot.start()
 }
 
-fun setupLogging() {
+suspend fun setupLogging() {
+    val latestFile = logFile(File("logs/latest.log"))
+    val latestTrace = logFile(File("logs/latest-trace.log"))
+    val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
+    val timestamped = logFile(File("logs/log-$timestamp.log"))
     loggingConfiguration {
         if (dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)
         } else {
             sink("stdout", CUSTOM_RENDERER_ANSI, STDOUT)
         }
-        sink("file_latest", CUSTOM_RENDERER, logFile(File("logs/latest.log")))
-        sink("file_latest_trace", CUSTOM_RENDERER, logFile(File("logs/latest-trace.log")))
-        val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
-        sink("file", CUSTOM_RENDERER, logFile(File("logs/log-$timestamp.log")))
+        sink("file_latest", CUSTOM_RENDERER, latestFile)
+        sink("file_latest_trace", CUSTOM_RENDERER, latestTrace)
+        sink("file", CUSTOM_RENDERER, timestamped)
         val seqServer = envOrNull("SEQ_SERVER") //?: "http://localhost:5341"
         if (seqServer != null) {
             sink("seq", seq(seqServer))

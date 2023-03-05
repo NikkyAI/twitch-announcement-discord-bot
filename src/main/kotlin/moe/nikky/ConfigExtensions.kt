@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import moe.nikky.db.*
+import moe.nikky.twitch.TwitchEntryConfig
 import java.io.File
 import java.sql.SQLException
 
@@ -116,8 +117,8 @@ suspend fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageChannel {
         logContext("guild" to guildBehavior.name)
     ) {
         guildBehavior.getChannelOfOrNull<TextChannel>(channel)
-        ?: guildBehavior.getChannelOfOrNull<NewsChannel>(channel)
-        ?: relayError("channel $channel in '${guildBehavior.name}' could not be loaded as TextChannel")
+            ?: guildBehavior.getChannelOfOrNull<NewsChannel>(channel)
+            ?: relayError("channel $channel in '${guildBehavior.name}' could not be loaded as TextChannel")
     }
 }
 

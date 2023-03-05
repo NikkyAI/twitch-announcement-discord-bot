@@ -8,8 +8,8 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
-import moe.nikky.TwitchApi.getSchedule
-import moe.nikky.TwitchApi.getToken
+import moe.nikky.twitch.TwitchApi.getSchedule
+import moe.nikky.twitch.TwitchApi.getToken
 
 private val httpClient = HttpClient(CIO) {
     install(ContentNegotiation) {

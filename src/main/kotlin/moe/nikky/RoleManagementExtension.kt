@@ -33,17 +33,29 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import moe.nikky.checks.hasBotControl
+import moe.nikky.checks.requiresBotControl
 import moe.nikky.converter.reactionEmoji
 import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.db.RoleChooserConfig
 import org.koin.core.component.inject
+import org.koin.dsl.module
 import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
-    override val name: String = "Role management"
+    override val name: String = "role-management"
     private val database: DiscordbotDatabase by inject()
+    private val config: ConfigurationExtension by inject()
     private val liveMessageJobs = mutableMapOf<Long, Job>()
+
+    init {
+        bot.getKoin().loadModules(
+            listOf(
+                module {
+                    single { this@RoleManagementExtension }
+                }
+            )
+        )
+    }
 
     companion object {
         private val requiredPermissions = arrayOf(
@@ -120,6 +132,7 @@ class RoleManagementExtension : Extension(), Klogging {
         ephemeralSlashCommand {
             name = "role"
             description = "Add or remove roles"
+            allowInDms = false
             requireBotPermissions(Permission.ManageRoles)
 
             ephemeralSubCommand(::AddRoleArg) {
@@ -127,14 +140,12 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "adds a new reaction to role mapping"
 
                 check {
-                    hasBotControl(database)
-                    guildFor(event)?.asGuild()?.botHasPermissions(
-                        Permission.ManageRoles
-                    )
+                    with(config) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
-                    *requiredPermissions
+                    *requiredPermissions,
+                    Permission.ManageRoles
                 )
 
                 action {
@@ -157,14 +168,12 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "lists all "
 
                 check {
-                    hasBotControl(database)
-                    guildFor(event)?.asGuild()?.botHasPermissions(
-                        Permission.ManageRoles
-                    )
+                    with(config) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
-                    *requiredPermissions
+                    *requiredPermissions,
+                    Permission.ManageRoles
                 )
 
                 action {
@@ -187,14 +196,12 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "to fix a mistyped section name or such"
 
                 check {
-                    hasBotControl(database)
-                    guildFor(event)?.asGuild()?.botHasPermissions(
-                        Permission.ManageRoles
-                    )
+                    with(config) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
-                    *requiredPermissions
+                    *requiredPermissions,
+                    Permission.ManageRoles
                 )
 
                 action {
@@ -217,7 +224,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "removes a role mapping"
 
                 check {
-                    hasBotControl(database)
+                    with(config) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
@@ -243,13 +250,11 @@ class RoleManagementExtension : Extension(), Klogging {
                 description = "check permissions in channel"
 
                 requireBotPermissions(
-                    *requiredPermissions
+                    *requiredPermissions,
+                    Permission.ManageRoles
                 )
                 check {
-                    hasBotControl(database)
-                    guildFor(event)?.asGuild()?.botHasPermissions(
-                        Permission.ManageRoles
-                    )
+                    with(config) { requiresBotControl() }
                 }
 
                 action {
@@ -267,21 +272,25 @@ class RoleManagementExtension : Extension(), Klogging {
                 withLogContext(event, event.guild) { guild ->
                     val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
 
-                    roleChoosers.map { it.channel(guild) }.distinct().forEach {
-                        val channel = it.asChannel()
-                        val missingPermissions = requiredPermissions.filterNot { permission ->
-                            channel.botHasPermissions(permission)
-                        }
+                    roleChoosers
+                        .map { it.channel(guild) }
+                        .distinct()
+                        .map {
+                            it.asChannel()
+                        }.forEach { channel ->
+                            val missingPermissions = requiredPermissions.filterNot { permission ->
+                                channel.botHasPermissions(permission)
+                            }
 
-                        if (missingPermissions.isNotEmpty()) {
-                            val locale = guild.preferredLocale
-                            logger.errorF {
-                                "missing permissions in ${guild.name} #${channel.name} ${
-                                    missingPermissions.joinToString(", ") { it.translate(locale) }
-                                }"
+                            if (missingPermissions.isNotEmpty()) {
+                                val locale = guild.preferredLocale
+                                logger.errorF {
+                                    "missing permissions in ${guild.name} #${channel.name} ${
+                                        missingPermissions.joinToString(", ") { it.translate(locale) }
+                                    }"
+                                }
                             }
                         }
-                    }
 
                     roleChoosers.forEach { roleChooserConfig ->
                         logger.infoF { "processing role chooser: $roleChooserConfig" }

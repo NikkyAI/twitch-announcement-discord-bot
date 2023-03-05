@@ -9,18 +9,18 @@ import com.kotlindiscord.kord.extensions.types.respond
 import io.klogging.Klogging
 
 class DiceExtension() : Extension(), Klogging {
-    override val name: String = "Dice"
+    override val name: String = "dice"
     override suspend fun setup() {
         publicSlashCommand(::DiceArgs) {
             name = "dice"
             description = "rolls dice"
+            allowInDms = true
 
             action {
-                withLogContext(event, guild) { guild ->
+                withLogContextOptionalGuild(event, guild) { guild ->
                     val diceNotation: DiceNotation = arguments.notation.diceNotation()
 
                     val result = diceNotation.roll()
-
 
                     val dices = result.results.joinToString("\n") {
                         """${it.dice.displayNotation.padEnd(6)} -> Σ ${it.result.sum()} :: Ø ${

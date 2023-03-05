@@ -15,15 +15,17 @@ version = "1.0-SNAPSHOT"
 repositories {
     google()
     mavenCentral()
-    maven {
+
+    maven(url = "https://oss.sonatype.org/content/repositories/snapshots") {
+        name = "Sonatype Snapshots (Legacy)"
+    }
+    maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
         name = "Sonatype Snapshots"
-        url = uri("https://oss.sonatype.org/content/repositories/snapshots")
     }
 
-    maven {
-        name = "Kotlin Discord"
-        url = uri("https://maven.kotlindiscord.com/repository/maven-public/")
-    }
+//    maven(url = "https://maven.kotlindiscord.com/repository/maven-public/") {
+//        name = "Kotlin Discord"
+//    }
 }
 
 application {
@@ -43,7 +45,11 @@ dependencies {
 //    implementation("dev.kord:kord-core:_")
     implementation("com.kotlindiscord.kord.extensions:kord-extensions:_")
     implementation("com.kotlindiscord.kord.extensions:annotations:_")
+    implementation("com.kotlindiscord.kord.extensions:extra-phishing:_")
+    implementation("com.kotlindiscord.kord.extensions:extra-pluralkit:_")
     ksp("com.kotlindiscord.kord.extensions:annotation-processor:_")
+
+//    implementation("dev.kord:kord-core:_")
 
     implementation("dev.kord.x:emoji:_")
 

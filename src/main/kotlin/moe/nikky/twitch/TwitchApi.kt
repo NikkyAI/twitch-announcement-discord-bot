@@ -1,4 +1,4 @@
-package moe.nikky
+package moe.nikky.twitch
 
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import io.klogging.Klogging
@@ -18,6 +18,10 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Transient
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
+import moe.nikky.debugF
+import moe.nikky.errorF
+import moe.nikky.infoF
+import moe.nikky.traceF
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -66,7 +70,7 @@ object TwitchApi : Klogging {
     ): Map<String, StreamData> {
         val chunkedList = userLogins.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get(urlString = "${twitchApi}/streams") {
+            get(urlString = "$twitchApi/streams") {
                 chunk.forEach {
                     parameter("user_login", it)
                 }
@@ -81,7 +85,7 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchUserData> {
         val chunkedList = logins.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get(urlString = "${twitchApi}/users") {
+            get(urlString = "$twitchApi/users") {
                 chunk.forEach {
                     parameter("login", it)
                 }
@@ -95,7 +99,7 @@ object TwitchApi : Klogging {
         token: Token?,
     ): TwitchVideoData? {
         return try {
-            get(urlString = "${twitchApi}/videos") {
+            get(urlString = "$twitchApi/videos") {
                 parameter("user_id", userId)
                 parameter("last", "1")
                 authHeaders(token ?: getToken())
@@ -112,7 +116,7 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchGameData> {
         val chunkedList = gameNames.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get(urlString = "${twitchApi}/games") {
+            get(urlString = "$twitchApi/games") {
                 chunk.forEach {
                     parameter("name", it)
                 }
@@ -127,7 +131,7 @@ object TwitchApi : Klogging {
     ): Map<String, TwitchChannelInfo> {
         val chunkedList = broadcasterIds.chunked(100)
         return chunkedList.flatMap { chunk ->
-            get(urlString = "${twitchApi}/channels") {
+            get(urlString = "$twitchApi/channels") {
                 chunk.forEach {
                     parameter("broadcaster_id", it)
                 }
@@ -146,7 +150,7 @@ object TwitchApi : Klogging {
         require(pageSize in 1..25) { "pageSize must be positive and not higher than 25" }
         val segments = requestPages { cursor ->
             try {
-                get("${twitchApi}/schedule") {
+                get("$twitchApi/schedule") {
                     authHeaders(token ?: getToken())
 
                     parameter("broadcaster_id", broadcasterId)

@@ -1,6 +1,6 @@
 # This file was generated using Kotlin DSL (.github/workflows/docker_workflow.main.kts).
 # If you want to modify the workflow, please change the Kotlin file and regenerate this YAML file.
-# Generated with https://github.com/krzema12/github-actions-kotlin-dsl
+# Generated with https://github.com/krzema12/github-workflows-kt
 
 name: Docker build & push
 on:
@@ -12,6 +12,7 @@ on:
     - main
 jobs:
   check_yaml_consistency:
+    name: Check YAML consistency
     runs-on: ubuntu-latest
     steps:
     - id: step-0
@@ -45,13 +46,12 @@ jobs:
       uses: docker/setup-buildx-action@v2
     - id: step-3
       name: Build and push
-      uses: docker/build-push-action@v3
+      uses: docker/build-push-action@v4
       with:
         context: .
         file: ./Dockerfile
         push: true
-        tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY
-          }}:latest
+        tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ secrets.DOCKER_HUB_REPOSITORY }}:latest
     - id: step-4
       name: image digest
       run: echo ${{ steps.step-3.outputs.digest }}

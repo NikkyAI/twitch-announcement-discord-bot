@@ -25,12 +25,13 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimePeriod
 import kotlinx.datetime.Instant
+import moe.nikky.twitch.TwitchNotificationExtension
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 class TestExtension : Extension(), Klogging {
-    override val name: String = "Test extension"
+    override val name: String = "test"
 
     val twitch by lazy {
         getKoin().get<TwitchNotificationExtension>()
@@ -80,6 +81,7 @@ class TestExtension : Extension(), Klogging {
         ephemeralSlashCommand {
             name = "events"
             description = "scheduled events things"
+            allowInDms = false
 
             ephemeralSubCommand(::ScheduleArgs) {
                 name = "create"
@@ -144,29 +146,29 @@ class TestExtension : Extension(), Klogging {
             }
         }
 
-        ephemeralMessageCommand {
-            name = "testmessagecmd"
-
-            action {
-                val targetMessage = event.interaction.getTarget()
-                respond {
-                    content = """message content: \n```${targetMessage.content}\n```"""
-                }
-            }
-        }
-        ephemeralUserCommand {
-            name = "testusercmd"
-
-            action {
-                val targetUser = event.interaction.getTarget()
-                respond {
-                    content = """
-                        |banner: ${targetUser.getBannerUrl(Image.Format.GIF)}
-                        |profile link: <${targetUser.profileLink}>
-                    """.trimMargin()
-                }
-            }
-        }
+//        ephemeralMessageCommand {
+//            name = "testmessagecmd"
+//
+//            action {
+//                val targetMessage = event.interaction.getTarget()
+//                respond {
+//                    content = """message content: \n```${targetMessage.content}\n```"""
+//                }
+//            }
+//        }
+//        ephemeralUserCommand {
+//            name = "testusercmd"
+//
+//            action {
+//                val targetUser = event.interaction.getTarget()
+//                respond {
+//                    content = """
+//                        |banner: ${targetUser.getBannerUrl(Image.Format.GIF)}
+//                        |profile link: <${targetUser.profileLink}>
+//                    """.trimMargin()
+//                }
+//            }
+//        }
 
         event<MessageCreateEvent> {  // Listen for message creation events
             action {  // Code to run when a message creation happens
@@ -175,14 +177,14 @@ class TestExtension : Extension(), Klogging {
                 }
             }
         }
-        event<GuildCreateEvent> {
-            action {
-                withLogContext(event, event.guild) { guild ->
-                    if (event.guild.id != TEST_GUILD_ID) return@withLogContext
-                    logger.infoF { "ready event on ${guild.name}" }
-                }
-            }
-        }
+//        event<GuildCreateEvent> {
+//            action {
+//                withLogContext(event, event.guild) { guild ->
+//                    if (event.guild.id != TEST_GUILD_ID) return@withLogContext
+//                    logger.infoF { "ready event on ${guild.name}" }
+//                }
+//            }
+//        }
     }
 
     inner class SlapArgs : Arguments() {

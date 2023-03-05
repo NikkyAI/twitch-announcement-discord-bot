@@ -16,11 +16,11 @@ import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
 
-suspend fun CheckContext<InteractionCreateEvent>.hasBotControl(database: DiscordbotDatabase) {
-    hasBotControl(database, event.getLocale())
+suspend fun CheckContext<InteractionCreateEvent>.requiresBotControl(database: DiscordbotDatabase) {
+    requiresBotControl(database, event.getLocale())
 }
 
-suspend fun CheckContext<Event>.hasBotControl(database: DiscordbotDatabase, locale: Locale) {
+suspend fun CheckContext<Event>.requiresBotControl(database: DiscordbotDatabase, locale: Locale) {
     val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
     val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
 
@@ -66,11 +66,11 @@ suspend fun CheckContext<InteractionCreateEvent>.hasPermissions(vararg permissio
     }
 }
 
-private suspend fun <T : Event> CheckContext<T>.anyCheck(vararg checks: suspend CheckContext<T>.() -> Unit) {
+suspend fun <T : Event> CheckContext<T>.anyCheck(vararg checks: suspend CheckContext<T>.() -> Unit) {
     anyCheck(checks.toList())
 }
 
-private suspend fun <T : Event> CheckContext<T>.anyCheck(checks: List<suspend CheckContext<T>.() -> Unit>) {
+suspend fun <T : Event> CheckContext<T>.anyCheck(checks: List<suspend CheckContext<T>.() -> Unit>) {
     if (!passed) {
         return
     }
