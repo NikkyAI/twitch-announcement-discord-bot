@@ -14,12 +14,16 @@ import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.*
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.ChannelType
+import dev.kord.common.entity.MessageFlag
+import dev.kord.common.entity.MessageFlags
 import dev.kord.common.entity.Permission
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
+import dev.kord.core.behavior.channel.createMessage
 import dev.kord.core.behavior.edit
 import dev.kord.core.entity.Guild
+import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
@@ -296,21 +300,26 @@ class RoleManagementExtension : Extension(), Klogging {
                         logger.infoF { "processing role chooser: $roleChooserConfig" }
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
-                            val message = roleChooserConfig.getMessageOrRelayError(guild)
-                                ?: roleChooserConfig.channel(guild)
-                                    .createMessage("placeholder for section ${roleChooserConfig.section}")
+                            val message = getOrCreateMessage(roleChooserConfig, guild)
                             val roleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
                             message.edit {
                                 content = buildMessage(
                                     guild,
                                     roleChooserConfig,
-                                    roleMapping
+                                    roleMapping,
+                                    flags,
                                 )
                                 logger.infoF { "new message content: \n$content\n" }
                             }
 
+                            val allReactionEmojis = message.reactions.map { it.emoji }.toSet()
+                            val emojisToRemove = allReactionEmojis - roleMapping.keys
+                            emojisToRemove.forEach { reactionEmoji ->
+                                message.deleteReaction(reactionEmoji)
+                            }
                             try {
                                 roleMapping.forEach { (emoji, role) ->
+                                    message.addReaction(emoji)
                                     val reactors = message.getReactors(emoji)
                                     reactors.map { it.asMemberOrNull(guild.id) }
                                         .filterNotNull()
@@ -359,7 +368,10 @@ class RoleManagementExtension : Extension(), Klogging {
                     section = arguments.section,
                     description = null,
                     channel = channel.id,
-                    message = channel.createMessage("placeholder").id
+                    message = channel.createMessage {
+                        content ="placeholder"
+                        suppressNotifications = true
+                    }.id
                 )
                 database.roleChooserQueries.find(
                     guildId = guild.id,
@@ -372,8 +384,7 @@ class RoleManagementExtension : Extension(), Klogging {
         logger.infoF { "reaction: '${arguments.reaction}'" }
         val reactionEmoji = arguments.reaction
 
-        val message = roleChooserConfig.getMessageOrRelayError(guild)
-            ?: channel.createMessage("placeholder for section ${arguments.section}")
+        val message = getOrCreateMessage(roleChooserConfig, guild)
 
         database.roleMappingQueries.upsert(
             roleChooserId = roleChooserConfig.roleChooserId,
@@ -386,7 +397,8 @@ class RoleManagementExtension : Extension(), Klogging {
             content = buildMessage(
                 guild,
                 roleChooserConfig,
-                newRoleMapping
+                newRoleMapping,
+                flags,
             )
         }
         newRoleMapping.forEach { (reactionEmoji, _) ->
@@ -471,8 +483,7 @@ class RoleManagementExtension : Extension(), Klogging {
         }
         val removedRole = roleMapping[reactionEmoji] ?: relayError("no role exists for ${reactionEmoji.mention}")
 
-        val message = roleChooserConfig.getMessageOrRelayError(guild)
-            ?: channel.createMessage("placeholder for section ${arguments.section}")
+        val message = getOrCreateMessage(roleChooserConfig, guild)
 
         database.roleMappingQueries.delete(
             roleChooserId = roleChooserConfig.roleChooserId,
@@ -483,6 +494,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 guild,
                 roleChooserConfig,
                 database.getRoleMapping(guild, roleChooserConfig),
+                flags,
             )
         }
         message.getReactors(reactionEmoji)
@@ -540,8 +552,7 @@ class RoleManagementExtension : Extension(), Klogging {
         ).executeAsOneOrNull()
             ?: relayError("no roleselection section ${arguments.oldSection}")
 
-        val message = roleChooserConfig.getMessageOrRelayError(guild)
-            ?: channel.createMessage("placeholder for section ${arguments.newSection}")
+        val message = getOrCreateMessage(roleChooserConfig, guild)
 
         database.roleChooserQueries.updateSection(
             section = arguments.newSection,
@@ -564,6 +575,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 guild,
                 newRoleChooserConfig,
                 newRoleMapping,
+                flags,
             )
             logger.infoF { "new message content: \n$content\n" }
         }
@@ -571,14 +583,47 @@ class RoleManagementExtension : Extension(), Klogging {
         return "renamed section"
     }
 
-    private suspend fun buildMessage(
-        guildBehavior: GuildBehavior,
+    private suspend fun getOrCreateMessage(
+        roleChooserConfig: RoleChooserConfig,
+        guild: Guild,
+        sectionName: String = roleChooserConfig.section,
+    ): Message {
+        val message = roleChooserConfig
+            .getMessageOrRelayError(guild)
+            ?: run {
+                logger.debugF { "creating new message" }
+                roleChooserConfig.channel(guild)
+                    .createMessage {
+                        content = "placeholder for section $sectionName"
+                        suppressNotifications = true
+                    }
+                    .also {
+                        database.roleChooserQueries.updateMessage(
+                            message = it.id,
+                            roleChooserId = roleChooserConfig.roleChooserId
+                        )
+                    }
+            }
+        return message
+    }
+    private fun buildMessage(
+        guild: Guild,
         roleChooserConfig: RoleChooserConfig,
         roleMapping: Map<ReactionEmoji, Role>,
-    ) = "**${roleChooserConfig.section}** : \n" + roleMapping.entries
-        .joinToString("\n") { (reactionEmoji, role) ->
-            "${reactionEmoji.mention} `${role.name}`"
+        flags: MessageFlags?,
+    ): String {
+        return if (flags?.contains(MessageFlag.SuppressNotifications) == false) {
+            "**${roleChooserConfig.section}** : \n" + roleMapping.entries
+                .joinToString("\n") { (reactionEmoji, role) ->
+                    "${reactionEmoji.mention} `${role.name}`"
+                }
+        } else {
+            "**${roleChooserConfig.section}** : \n" + roleMapping.entries
+                .joinToString("\n") { (reactionEmoji, role) ->
+                    "${reactionEmoji.mention} ${role.mention}"
+                }
         }
+    }
 
     @OptIn(KordPreview::class)
     private suspend fun startOnReaction(

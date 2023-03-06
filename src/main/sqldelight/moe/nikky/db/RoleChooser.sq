@@ -44,6 +44,12 @@ updateSection:
     WHERE roleChooserId=?
   ;
 
+updateMessage:
+    UPDATE roleChooserConfig
+    SET message=?
+    WHERE roleChooserId=?
+  ;
+
 getAllFromChannel:
   SELECT *
     FROM roleChooserConfig
