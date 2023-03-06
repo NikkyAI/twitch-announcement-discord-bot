@@ -612,15 +612,15 @@ class RoleManagementExtension : Extension(), Klogging {
         roleMapping: Map<ReactionEmoji, Role>,
         flags: MessageFlags?,
     ): String {
-        return if (flags?.contains(MessageFlag.SuppressNotifications) == false) {
+        return if (flags?.contains(MessageFlag.SuppressNotifications) == true) {
             "**${roleChooserConfig.section}** : \n" + roleMapping.entries
                 .joinToString("\n") { (reactionEmoji, role) ->
-                    "${reactionEmoji.mention} `${role.name}`"
+                    "${reactionEmoji.mention} ${role.mention}"
                 }
         } else {
             "**${roleChooserConfig.section}** : \n" + roleMapping.entries
                 .joinToString("\n") { (reactionEmoji, role) ->
-                    "${reactionEmoji.mention} ${role.mention}"
+                    "${reactionEmoji.mention} `${role.name}`"
                 }
         }
     }
