@@ -1,16 +1,16 @@
 #!/usr/bin/env kotlin
 
-@file:DependsOn("it.krzeminski:github-actions-kotlin-dsl:0.38.0")
+@file:DependsOn("io.github.typesafegithub:github-workflows-kt:0.42.0")
 
-import it.krzeminski.githubactions.actions.actions.CheckoutV3
-import it.krzeminski.githubactions.actions.docker.*
-import it.krzeminski.githubactions.actions.nobrayner.DiscordWebhookV1
-import it.krzeminski.githubactions.domain.RunnerType.UbuntuLatest
-import it.krzeminski.githubactions.domain.triggers.PullRequest
-import it.krzeminski.githubactions.domain.triggers.Push
-import it.krzeminski.githubactions.dsl.expressions.expr
-import it.krzeminski.githubactions.dsl.workflow
-import it.krzeminski.githubactions.yaml.writeToFile
+import io.github.typesafegithub.workflows.actions.actions.CheckoutV3
+import io.github.typesafegithub.workflows.actions.docker.*
+import io.github.typesafegithub.workflows.actions.nobrayner.DiscordWebhookV1
+import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
+import io.github.typesafegithub.workflows.domain.triggers.PullRequest
+import io.github.typesafegithub.workflows.domain.triggers.Push
+import io.github.typesafegithub.workflows.dsl.expressions.expr
+import io.github.typesafegithub.workflows.dsl.workflow
+import io.github.typesafegithub.workflows.yaml.writeToFile
 
 val workflow = workflow(
     name = "Docker build & push",
