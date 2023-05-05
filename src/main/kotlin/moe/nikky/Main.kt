@@ -71,6 +71,7 @@ suspend fun main() {
             add(::DiceExtension)
             add(::RoleManagementExtension)
             add(::TwitchNotificationExtension)
+            add(::LocalTimeExtension)
             if (TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }

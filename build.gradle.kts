@@ -53,7 +53,7 @@ dependencies {
 
     implementation("dev.kord.x:emoji:_")
 
-    implementation("dev.kord.cache:cache-map:_")
+//    implementation("dev.kord.cache:cache-map:_")
 
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:_")
 
