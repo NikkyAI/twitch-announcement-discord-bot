@@ -83,7 +83,7 @@ class BotInfoExtension : Extension(), Klogging {
                             val choosableRoles =
                                 roleChoosers.map { roleChooser ->
                                     val roleMapping = database.getRoleMapping(guild, roleChooser)
-                                    "**${roleChooser.section}**:\n" + roleMapping.entries.joinToString("\n") { (reaction, role) ->
+                                    "**${roleChooser.section}**:\n" + roleMapping.joinToString("\n") { (reaction, role) ->
                                         "  ${reaction.mention}: ${role.mention}"
                                     }
                                 }

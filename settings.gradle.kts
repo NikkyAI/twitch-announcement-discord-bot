@@ -8,6 +8,8 @@ pluginManagement {
 
 plugins {
     id("com.gradle.enterprise") version "3.13.1"
+////                        # available:"3.13.2"
+////                        # available:"3.13.3"
     id("de.fayard.refreshVersions") version "0.51.0"
 }
 

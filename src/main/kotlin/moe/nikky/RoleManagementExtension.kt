@@ -313,7 +313,7 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
 
                             val allReactionEmojis = message.reactions.map { it.emoji }.toSet()
-                            val emojisToRemove = allReactionEmojis - roleMapping.keys
+                            val emojisToRemove = allReactionEmojis - roleMapping.map { it.first }.toSet()
                             emojisToRemove.forEach { reactionEmoji ->
                                 message.deleteReaction(reactionEmoji)
                             }
@@ -481,7 +481,7 @@ class RoleManagementExtension : Extension(), Klogging {
 
             return "removed role section"
         }
-        val removedRole = roleMapping[reactionEmoji] ?: relayError("no role exists for ${reactionEmoji.mention}")
+        val removedRole = roleMapping.getByEmoji(reactionEmoji) ?: relayError("no role exists for ${reactionEmoji.mention}")
 
         val message = getOrCreateMessage(roleChooserConfig, guild)
 
@@ -609,16 +609,16 @@ class RoleManagementExtension : Extension(), Klogging {
     private fun buildMessage(
         guild: Guild,
         roleChooserConfig: RoleChooserConfig,
-        roleMapping: Map<ReactionEmoji, Role>,
+        roleMapping: List<Pair<ReactionEmoji, Role>>,
         flags: MessageFlags?,
     ): String {
         return if (flags?.contains(MessageFlag.SuppressNotifications) == true) {
-            "**${roleChooserConfig.section}** : \n" + roleMapping.entries
+            "**${roleChooserConfig.section}** : \n" + roleMapping
                 .joinToString("\n") { (reactionEmoji, role) ->
                     "${reactionEmoji.mention} ${role.mention}"
                 }
         } else {
-            "**${roleChooserConfig.section}** : \n" + roleMapping.entries
+            "**${roleChooserConfig.section}** : \n" + roleMapping
                 .joinToString("\n") { (reactionEmoji, role) ->
                     "${reactionEmoji.mention} `${role.name}`"
                 }
@@ -630,7 +630,7 @@ class RoleManagementExtension : Extension(), Klogging {
         guildBehavior: GuildBehavior,
         message: MessageBehavior,
         rolePickerMessageState: RoleChooserConfig,
-        roleMapping: Map<ReactionEmoji, Role>,
+        roleMapping: List<Pair<ReactionEmoji, Role>>,
     ) {
         val job = Job()
         liveMessageJobs[rolePickerMessageState.roleChooserId] = job
@@ -642,12 +642,12 @@ class RoleManagementExtension : Extension(), Klogging {
         ) {
             onReactionAdd { event ->
                 if (event.userId == kord.selfId) return@onReactionAdd
-                val role = roleMapping[event.emoji] ?: return@onReactionAdd
+                val role = roleMapping.getByEmoji(event.emoji) ?: return@onReactionAdd
                 event.userAsMember?.addRole(role.id)
             }
             onReactionRemove { event ->
                 if (event.userId == kord.selfId) return@onReactionRemove
-                val role = roleMapping[event.emoji] ?: return@onReactionRemove
+                val role = roleMapping.getByEmoji(event.emoji) ?: return@onReactionRemove
                 event.userAsMember?.removeRole(role.id)
             }
         }
@@ -655,3 +655,6 @@ class RoleManagementExtension : Extension(), Klogging {
 
 
 }
+
+private fun List<Pair<ReactionEmoji, Role>>.getByEmoji(emoji: ReactionEmoji): Role? =
+    firstOrNull { it.first == emoji }?.second

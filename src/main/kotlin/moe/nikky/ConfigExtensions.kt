@@ -90,11 +90,11 @@ fun DiscordbotDatabase.getTwitchConfigs(guild: Guild): List<TwitchConfig> {
     return twitchConfigQueries.getAll(guild.id).executeAsList()
 }
 
-suspend fun DiscordbotDatabase.getRoleMapping(guildBehavior: GuildBehavior, roleChooser: RoleChooserConfig): Map<ReactionEmoji, Role> {
+suspend fun DiscordbotDatabase.getRoleMapping(guildBehavior: GuildBehavior, roleChooser: RoleChooserConfig): List<Pair<ReactionEmoji, Role>> {
     val roleMapping = roleMappingQueries.getAll(roleChooser.roleChooserId).executeAsList().associate { roleChooserMapping ->
         roleChooserMapping.reaction to roleChooserMapping.role
     }
-    return roleMapping.entries.associate { (reactionEmojiName, role) ->
+    return roleMapping.entries.map { (reactionEmojiName, role) ->
         val reactionEmoji = guildBehavior.emojis.firstOrNull { it.mention == reactionEmojiName }
             ?.let { ReactionEmoji.from(it) }
             ?: ReactionEmoji.Unicode(reactionEmojiName)
