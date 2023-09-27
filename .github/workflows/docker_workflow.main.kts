@@ -1,8 +1,8 @@
 #!/usr/bin/env kotlin
 
-@file:DependsOn("io.github.typesafegithub:github-workflows-kt:0.42.0")
+@file:DependsOn("io.github.typesafegithub:github-workflows-kt:1.1.0")
 
-import io.github.typesafegithub.workflows.actions.actions.CheckoutV3
+import io.github.typesafegithub.workflows.actions.actions.CheckoutV4
 import io.github.typesafegithub.workflows.actions.docker.*
 import io.github.typesafegithub.workflows.actions.nobrayner.DiscordWebhookV1
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
@@ -31,29 +31,29 @@ val workflow = workflow(
     ) {
         uses(
             name = "Check out",
-            action = CheckoutV3(
-                fetchDepth = CheckoutV3.FetchDepth.Value(0)
+            action = CheckoutV4(
+                fetchDepth = CheckoutV4.FetchDepth.Value(0)
             )
         )
         uses(
             name = "Docker Login",
-            action = LoginActionV2(
-                username = expr("secrets.DOCKER_HUB_USERNAME"),
-                password = expr("secrets.DOCKER_HUB_ACCESS_TOKEN"),
-            )
+            action = LoginActionV3(
+        username = expr("secrets.DOCKER_HUB_USERNAME"),
+        password = expr("secrets.DOCKER_HUB_ACCESS_TOKEN"),
+    )
         )
         uses(
             name = "Docker Setup buildx",
-            action = SetupBuildxActionV2()
+            action = SetupBuildxActionV3()
         )
         val dockerBuildPush = uses(
             name = "Build and push",
-            action = BuildPushActionV4(
-                context = ".",
-                file = "./Dockerfile",
-                push = true,
-                tags = listOf("${expr("secrets.DOCKER_HUB_USERNAME")}/${expr("secrets.DOCKER_HUB_REPOSITORY")}:latest"),
-            )
+            action = BuildPushActionV5(
+        context = ".",
+        file = "./Dockerfile",
+        push = true,
+        tags = listOf("${expr("secrets.DOCKER_HUB_USERNAME")}/${expr("secrets.DOCKER_HUB_REPOSITORY")}:latest"),
+    )
         )
         run(
             name = "image digest",
