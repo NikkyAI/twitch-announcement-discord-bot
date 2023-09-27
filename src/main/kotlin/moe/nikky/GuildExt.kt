@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.firstOrNull
 
 
 suspend fun GuildBehavior.snowflakeToName(id: Snowflake) =
-    getRoleOrNull(id)?.name ?: getMemberOrNull(id)?.displayName
+    getRoleOrNull(id)?.name ?: getMemberOrNull(id)?.effectiveName
 
 
 suspend fun GuildBehavior.getOrCreateTextChannel(

@@ -1,11 +1,14 @@
 @file:Suppress("GradlePackageUpdate")
 
+import de.fayard.refreshVersions.core.versionFor
+
+
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
-    id("com.squareup.sqldelight")
+    id("app.cash.sqldelight")
     application
 }
 
@@ -66,12 +69,15 @@ dependencies {
 
     implementation("br.com.colman:dice-helper:_")
 
-    implementation("com.squareup.sqldelight:sqlite-driver:_")
+    implementation("app.cash.sqldelight:sqlite-driver:_")
+    implementation("app.cash.sqldelight:primitive-adapters:_")
+    implementation("app.cash.sqldelight:coroutines-extensions:_")
 
     implementation(Square.okio)
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")
+//    implementation("io.github.oshai:kotlin-logging")
 
     implementation("io.ktor:ktor-client-logging:_")
     implementation("org.slf4j:slf4j-api:_")
@@ -91,12 +97,15 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 }
 
 sqldelight {
-    database("DiscordbotDatabase") {
-        packageName = "moe.nikky.db"
-        deriveSchemaFromMigrations = true
-        schemaOutputDirectory = file("src/main/sqldelight/databases")
-        dialect = "sqlite:3.24"
-        verifyMigrations = true
+    databases {
+        create("DiscordbotDatabase") {
+            packageName.set("moe.nikky.db")
+//            generateAsync.set(true)
+            deriveSchemaFromMigrations.set(true)
+            schemaOutputDirectory.set(file("src/main/sqldelight/databases"))
+            dialect("app.cash.sqldelight:sqlite-3-38-dialect:${versionFor("version.app.cash.sqldelight")}")
+            verifyMigrations.set(true)
+        }
     }
 //    Database { // This will be the name of the generated database class.
 //        packageName = "com.example"

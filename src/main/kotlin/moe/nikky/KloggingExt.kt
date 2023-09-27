@@ -5,7 +5,6 @@ import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.channel.GuildChannel
 import dev.kord.core.event.Event
-import dev.kord.core.event.interaction.GuildChatInputCommandInteractionCreateEvent
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.context.logContext
 import io.klogging.events.LogEvent
@@ -21,12 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import mu.withLoggingContext
-import okio.buffer
-import okio.sink
 import java.io.File
 
 
@@ -73,9 +69,13 @@ suspend fun logFile(file: File, append: Boolean = false): SendString {
     file.parentFile.mkdirs()
     if(!append && file.exists()) {
         file.delete()
-        file.createNewFile()
+        withContext(Dispatchers.IO) {
+            file.createNewFile()
+        }
     } else if(!file.exists()) {
-        file.createNewFile()
+        withContext(Dispatchers.IO) {
+            file.createNewFile()
+        }
     }
     val channel = Channel<String>()
     GlobalScope.launch(Dispatchers.IO) {
@@ -87,7 +87,9 @@ suspend fun logFile(file: File, append: Boolean = false): SendString {
     }
 
     return { line ->
-        channel.send(line)
+        runBlocking {
+            channel.send(line)
+        }
     }
 }
 

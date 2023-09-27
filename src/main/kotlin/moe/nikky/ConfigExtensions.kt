@@ -1,9 +1,9 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.utils.envOrNull
-import com.squareup.sqldelight.ColumnAdapter
-import com.squareup.sqldelight.db.SqlDriver
-import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
+import app.cash.sqldelight.ColumnAdapter
+import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.getChannelOfOrNull
@@ -64,11 +64,11 @@ fun DiscordbotDatabase.Companion.load(): DiscordbotDatabase = runBlocking {
         )
     )
 
-    val oldVersion: Int = try {
-        database.schemaVersionQueries.getSchemaVersion().executeAsOne().version?.toInt()!!
+    val oldVersion: Long = try {
+        database.schemaVersionQueries.getSchemaVersion().executeAsOne().version!!
     } catch (e: SQLException) {
         e.printStackTrace()
-        0
+        0L
     }
     logger.infoF { "database is at version: $oldVersion" }
 

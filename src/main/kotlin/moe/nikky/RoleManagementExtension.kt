@@ -13,6 +13,7 @@ import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.*
 import dev.kord.common.annotation.KordPreview
+import dev.kord.common.asJavaLocale
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.MessageFlag
 import dev.kord.common.entity.MessageFlags
@@ -43,6 +44,7 @@ import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.db.RoleChooserConfig
 import org.koin.core.component.inject
 import org.koin.dsl.module
+import java.util.*
 import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
@@ -287,7 +289,7 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
 
                             if (missingPermissions.isNotEmpty()) {
-                                val locale = guild.preferredLocale
+                                val locale: Locale = guild.preferredLocale.asJavaLocale()
                                 logger.errorF {
                                     "missing permissions in ${guild.name} #${channel.name} ${
                                         missingPermissions.joinToString(", ") { it.translate(locale) }
@@ -326,7 +328,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                         .filter { member ->
                                             role.id !in member.roleIds
                                         }.collect { member ->
-                                            logger.info { "adding '${role.name}' to '${member.displayName}'" }
+                                            logger.info { "adding '${role.name}' to '${member.effectiveName}'" }
                                             member.addRole(role.id)
                                         }
                                 }

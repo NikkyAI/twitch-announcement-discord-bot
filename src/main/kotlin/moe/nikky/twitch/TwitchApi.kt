@@ -6,6 +6,7 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
+import io.sentry.JsonSerializable
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -266,10 +267,32 @@ object TwitchApi : Klogging {
             }
         }
         return try {
-            json.decodeFromJsonElement(
-                ListSerializer(serializer),
+            val objects = json.decodeFromJsonElement(
+                ListSerializer(JsonObject.serializer()),
                 array
             )
+            objects.map { listElement ->
+                try {
+                    json.decodeFromJsonElement(
+                        serializer,
+                        listElement
+                    )
+                } catch (e: SerializationException) {
+                    logger.errorF(e) {
+                        "twitch data failed to list entry: \n${
+                            json.encodeToString(
+                                JsonObject.serializer(),
+                                listElement
+                            )
+                        }"
+                    }
+                    return emptyList()
+                }
+            }
+//            json.decodeFromJsonElement(
+//                ListSerializer(serializer),
+//                array
+//            )
         } catch (e: SerializationException) {
             logger.errorF(e) {
                 "twitch data failed to parse key $key: \n${
@@ -356,9 +379,11 @@ data class TwitchUserData(
 data class TwitchVideoData(
     val id: String,
     @SerialName("stream_id")
-    val streamId: String,
+    val streamId: String?,
     @SerialName("user_id")
     val userId: String,
+    @SerialName("user_login")
+    val userLogin: String,
     @SerialName("user_name")
     val userName: String,
     val title: String,

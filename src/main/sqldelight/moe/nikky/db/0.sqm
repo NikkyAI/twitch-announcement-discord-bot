@@ -1,3 +1,4 @@
+import kotlin.Int;
 import dev.kord.common.entity.Snowflake;
 
 CREATE TABLE guildConfig (
