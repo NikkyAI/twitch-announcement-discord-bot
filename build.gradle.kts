@@ -61,6 +61,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:_")
 
     implementation(KotlinX.serialization.json)
+    implementation("io.github.xn32:json5k:_")
     implementation("io.ktor:ktor-serialization-kotlinx-json:_")
 
     implementation(KotlinX.coroutines.core)

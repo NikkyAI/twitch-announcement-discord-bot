@@ -300,6 +300,8 @@ class RoleManagementExtension : Extension(), Klogging {
                     convertConfig(event.guild)
                 }
                 withLogContext(event, event.guild) { guild ->
+//                    val textChannels = guild.channels.filter { it is TextChannel }
+
                     val config = guild.config().get() ?: return@withLogContext
 
                     val roleChoosers =

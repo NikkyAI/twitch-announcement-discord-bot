@@ -22,11 +22,13 @@ import dev.kord.core.entity.Role
 import dev.kord.core.event.Event
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.interaction.InteractionCreateEvent
+import io.github.xn32.json5k.SerialComment
 import io.klogging.Klogging
 import kotlinx.serialization.Serializable
 import moe.nikky.checks.anyCheck
 import moe.nikky.checks.hasRoleNullable
 import moe.nikky.db.DiscordbotDatabase
+import net.peanuuutz.tomlkt.TomlComment
 import org.koin.core.component.inject
 import org.koin.dsl.module
 import java.util.*
@@ -171,10 +173,19 @@ class ConfigurationExtension : Extension(), Klogging {
 @Serializable
 @Suppress("DataClassShouldBeImmutable", "MagicNumber")
 data class GuildConfig(
-//    @TomlComment(
-//        "role that should be treated as administrator for bot control"
-//    )
+    @TomlComment(
+        "role that should be treated as administrator for bot control"
+    )
+    @SerialComment(
+        "role that should be treated as administrator for bot control"
+    )
     val adminRole: Snowflake? = null,
+    @TomlComment(
+        "human readable name of the admin role"
+    )
+    @SerialComment(
+        "human-readable name of the admin role"
+    )
     val adminRoleName: String? = null,
 ) : Data {
     suspend fun adminRole(guildBehavior: GuildBehavior): Role? {

@@ -11,6 +11,7 @@ import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.rest.request.KtorRequestException
+import io.github.xn32.json5k.SerialComment
 import io.klogging.context.logContext
 import io.klogging.logger
 import kotlinx.coroutines.flow.firstOrNull
@@ -21,10 +22,10 @@ private val logger = logger(object{}.javaClass.enclosingClass.canonicalName)
 
 @Serializable
 data class RoleChooserConfig(
-//    val roleChooserId: Long,
     val section: String,
-//    val description: String?,
+    @SerialComment("channel")
     val channelId: Snowflake,
+    @SerialComment("message")
     val messageId: Snowflake,
     val roleMapping: List<RoleMappingConfig>,
 ) : Data {

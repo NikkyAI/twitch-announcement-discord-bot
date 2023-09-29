@@ -158,7 +158,7 @@ private fun registerKoinModules() {
     getKoin().loadModules(
         listOf(
             module {
-                single<DataAdapter<*>> { JsonDataAdapter() }
+                single<DataAdapter<*>> { Json5DataAdapter() }
                 single { DiscordbotDatabase.load() }
             }
         )
