@@ -27,7 +27,6 @@ import kotlinx.serialization.Serializable
 import moe.nikky.checks.anyCheck
 import moe.nikky.checks.hasRoleNullable
 import moe.nikky.db.DiscordbotDatabase
-import net.peanuuutz.tomlkt.TomlComment
 import org.koin.core.component.inject
 import org.koin.dsl.module
 import java.util.*
@@ -45,13 +44,11 @@ class ConfigurationExtension : Extension(), Klogging {
         )
     }
 
-    private val database: DiscordbotDatabase by inject()
-
     private val guildConfig = StorageUnit(
         StorageType.Config,
         name,
         "guild-config",
-        BotConfig::class
+        GuildConfig::class
     )
 
     private fun GuildBehavior.config() =
@@ -84,14 +81,8 @@ class ConfigurationExtension : Extension(), Klogging {
                     withLogContext(event, guild) { guild ->
 
                         val configUnit = guild.config()
-                        val config = configUnit.get() ?: BotConfig()
-                        config.adminRole = arguments.role.id
-                        config.adminRoleName = arguments.role.name
-                        configUnit.save(config)
-                        database.guildConfigQueries.updateAdminRole(
-                            adminRole = arguments.role.id,
-                            guildId = guild.id
-                        )
+                        val config = configUnit.get() ?: GuildConfig()
+                        configUnit.save(config.setAdminRole(arguments.role))
 
                         respond {
                             content = "config saved"
@@ -110,14 +101,8 @@ class ConfigurationExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         val configUnit = guild.config()
-                        val config = configUnit.get() ?: BotConfig()
-                        config.adminRole = null
-                        config.adminRoleName = null
-                        configUnit.save(config)
-                        database.guildConfigQueries.updateAdminRole(
-                            adminRole = null,
-                            guildId = guild.id
-                        )
+                        val config = configUnit.get() ?: GuildConfig()
+                        configUnit.save(config.setAdminRole(null))
                         respond {
                             content = "config saved"
                         }
@@ -128,12 +113,8 @@ class ConfigurationExtension : Extension(), Klogging {
 
         event<GuildCreateEvent> {
             action {
-                convertConfig(event.guild)
-                withLogContext(event, event.guild) { guild ->
-                    database.guildConfigQueries.upsert(
-                        guildId = guild.id,
-                        name = guild.name,
-                    )
+                if(event.guild.config().get() == null) {
+                    convertConfig(event.guild)
                 }
             }
         }
@@ -147,6 +128,7 @@ class ConfigurationExtension : Extension(), Klogging {
         val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
         val configUnit = guild.config()
         val guildConfig = configUnit.get()
+        val adminRole = guildConfig?.adminRole(guild)
 
         anyCheck(
             {
@@ -154,12 +136,11 @@ class ConfigurationExtension : Extension(), Klogging {
             },
             {
                 hasRoleNullable { event ->
-                    guildConfig?.adminRole(guild)
+                    adminRole
                 }
             }
         )
         if (!passed) {
-            val adminRole = guildConfig?.adminRole(guild)
             fail(
                 "must have permission: **${Permission.Administrator.translate(locale)}**"
                         + (adminRole?.let { "\nor role: ** ${it.mention}**" }
@@ -169,29 +150,41 @@ class ConfigurationExtension : Extension(), Klogging {
     }
 
     private suspend fun convertConfig(guild: GuildBehavior) {
+        val database: DiscordbotDatabase by inject()
         val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
 
         val adminRole = guildConfig.adminRole(guild)
 
         guild.config().save(
-            BotConfig(
+            GuildConfig(
                 adminRole = adminRole?.id,
                 adminRoleName = adminRole?.name
             )
         )
     }
+
+    suspend fun loadConfig(guild: GuildBehavior): GuildConfig? {
+        return guild.config().get()
+    }
 }
 
 @Serializable
 @Suppress("DataClassShouldBeImmutable", "MagicNumber")
-data class BotConfig(
-    @TomlComment(
-        "role that should be treated as administrator for bot control"
-    )
-    var adminRole: Snowflake? = null,
-    var adminRoleName: String? = null,
+data class GuildConfig(
+//    @TomlComment(
+//        "role that should be treated as administrator for bot control"
+//    )
+    val adminRole: Snowflake? = null,
+    val adminRoleName: String? = null,
 ) : Data {
     suspend fun adminRole(guildBehavior: GuildBehavior): Role? {
         return adminRole?.let { guildBehavior.getRoleOrNull(it) }
+    }
+
+    fun setAdminRole(role: Role?): GuildConfig {
+        return copy(
+            adminRole = role?.id,
+            adminRoleName = role?.name,
+        )
     }
 }

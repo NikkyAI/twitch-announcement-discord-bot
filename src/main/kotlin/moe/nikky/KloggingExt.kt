@@ -16,15 +16,14 @@ import io.klogging.rendering.localString
 import io.klogging.sending.SendString
 import io.ktor.util.cio.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
-
 
 val DOCKER_RENDERER: RenderString = { e: LogEvent ->
     val loggerOrFile = e.items["file"] ?: e.logger
@@ -61,9 +60,13 @@ val CUSTOM_RENDERER_ANSI: RenderString = { e: LogEvent ->
 //
 //    return { line ->
 //        sink.writeUtf8(line + "\n")
-//        delay(1)
 //    }
 //}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+val logScope = CoroutineScope(
+    Dispatchers.IO.limitedParallelism(10) + CoroutineName("log")
+)
 
 suspend fun logFile(file: File, append: Boolean = false): SendString {
     file.parentFile.mkdirs()
@@ -77,8 +80,9 @@ suspend fun logFile(file: File, append: Boolean = false): SendString {
             file.createNewFile()
         }
     }
+
     val channel = Channel<String>()
-    GlobalScope.launch(Dispatchers.IO) {
+    logScope.launch {
         file.writeChannel().use {
              for (line in channel) {
                  writeStringUtf8(line + "\n")
@@ -87,7 +91,7 @@ suspend fun logFile(file: File, append: Boolean = false): SendString {
     }
 
     return { line ->
-        runBlocking {
+        logScope.launch {
             channel.send(line)
         }
     }

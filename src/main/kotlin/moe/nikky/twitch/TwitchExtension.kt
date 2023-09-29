@@ -41,19 +41,18 @@ import io.klogging.context.logContext
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.forms.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import moe.nikky.ConfigurationExtension
-import moe.nikky.channel
-import moe.nikky.checks.requiresBotControl
 import moe.nikky.db.DiscordbotDatabase
-import moe.nikky.db.TwitchConfig
 import moe.nikky.debugF
 import moe.nikky.errorF
 import moe.nikky.getTwitchConfigs
@@ -61,7 +60,6 @@ import moe.nikky.infoF
 import moe.nikky.linesChunkedByMaxLength
 import moe.nikky.location
 import moe.nikky.relayError
-import moe.nikky.role
 import moe.nikky.traceF
 import moe.nikky.twitch.TwitchApi.getChannelInfo
 import moe.nikky.twitch.TwitchApi.getGames
@@ -78,44 +76,36 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
-class TwitchNotificationExtension() : Extension(), Klogging {
+class TwitchExtension() : Extension(), Klogging {
     override val name = "twitch-notifications"
     val color = Color(0x6441a5)
+
+    private val guildConfig = StorageUnit(
+        storageType = StorageType.Config,
+        namespace = name,
+        identifier = "twitch",
+        dataType = TwitchGuildConfig::class
+    )
+
+    private fun GuildBehavior.config() =
+        guildConfig
+            .withGuild(id)
 
     init {
         bot.getKoin().loadModules(
             listOf(
                 module {
-                    single { this@TwitchNotificationExtension }
+                    single { this@TwitchExtension }
                 }
             )
         )
     }
 
-    private val database: DiscordbotDatabase by inject()
-    private val config: ConfigurationExtension by inject()
+    private val configurationExtension: ConfigurationExtension by inject()
 
     //    private var token: Token? = null
 //    private var tokenExpiration: Instant = Instant.DISTANT_PAST
     private val webhooksCache = mutableMapOf<Snowflake, Webhook>()
-
-    private val channelConfig = StorageUnit(
-        StorageType.Config,
-        name,
-        "twitch-channel-config",
-        TwitchChannelConfig::class
-    )
-
-    private fun GuildBehavior.config(channel: ChannelBehavior) =
-        channelConfig
-            .withGuild(id)
-            .withChannel(channel.id)
-
-    private val token by lazy {
-        runBlocking {
-            httpClient.getToken()
-        }
-    }
 
     companion object {
         private const val WEBHOOK_NAME_PREFIX = "twitch-notifications"
@@ -155,22 +145,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 //            level = LogLevel.ALL
 //        }
     }
-    private val httpClientVerbose = HttpClient(CIO) {
-        install(ContentNegotiation) {
-            json()
-        }
-        install(Logging) {
-            logger = Logger.DEFAULT
-            level = LogLevel.ALL
-        }
-        engine {
-            requestTimeout = 15_000
-            endpoint {
-                connectTimeout = 5_000
-                connectAttempts = 5
-            }
-        }
-    }
 
     private val scheduler = Scheduler()
     private val task: Task =
@@ -188,9 +162,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     )
                 ) {
                     val guilds = kord.guilds.toList()
-//                    guilds.forEach {
-//                        convertConfig(it)
-//                    }
+                    guilds.forEach { guild ->
+                        if(guild.config().get() == null) {
+                            convertConfig(guild)
+                        }
+                    }
 
                     logger.traceF { "checking streams" }
                     val token = httpClient.getToken()
@@ -297,7 +273,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 locking = true
 
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
@@ -324,7 +300,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "removes a streamer from notifications"
 
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 requireBotPermissions(
@@ -351,34 +327,56 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "lists all streamers in config"
 
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val messages =
-                            database.twitchConfigQueries.getAll(guildId = guild.id).executeAsList().map { entry ->
-                                val message = entry.message?.let { channel.getMessageOrNull(it) }
-                                """
-                            <https://twitch.tv/${entry.twitchUserName}>
-                            ${entry.role(guild).mention}
-                            ${entry.channel(guild).mention}
-                            ${message?.getJumpUrl()}
-                        """.trimIndent()
-                            }
+                        val twitchGuildConfig = guild.config().get() ?: TwitchGuildConfig()
 
-                        val response = if (messages.isNotEmpty()) {
-                            "registered twitch notifications: \n\n" + messages.joinToString("\n\n")
-                        } else {
-                            "no twitch notifications registered, get started with /twitch add "
+                        val configEntries = twitchGuildConfig.configs.values
+                            .sortedBy { it.roleId }
+                            .sortedBy { it.channelId }
+                        val messages = configEntries.map { entry ->
+                            val channel = entry.channel(guild)
+                            val message = entry.messageId?.let { channel.getMessageOrNull(it) }
+                            val jumpUrl = message?.getJumpUrl()
+                            val role = entry.role(guild)
+
+                            if(jumpUrl != null) {
+                                "$jumpUrl ${role.mention} <${entry.twitchUrl}>"
+                            } else {
+                                "${channel.mention} ${role.mention} <${entry.twitchUrl}>"
+                            }
                         }
 
-                        respond {
-                            content = response
+
+                        if(messages.isEmpty()) {
+                            respond {
+                                content =  "no twitch notifications registered, get started with /twitch add "
+                            }
+                            return@withLogContext
+                        }
+
+                        val response =
+                            "registered twitch notifications: \n\n${messages.joinToString("\n")}"
+
+                        if(response.length >= 2000) {
+                            respond {
+                                addFile(
+                                    "response.txt",
+                                    ChannelProvider {
+                                        ByteReadChannel(response)
+                                    }
+                                )
+                            }
+                        } else {
+                            respond {
+                                content = response
+                            }
                         }
                     }
                 }
-
             }
 
             ephemeralSubCommand {
@@ -389,7 +387,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     *requiredPermissions
                 )
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 action {
@@ -404,7 +402,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 description = "check status of twitch background loop"
 
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 action {
@@ -422,7 +420,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     Permission.ManageEvents,
                 )
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 action {
@@ -460,13 +458,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                 .filter { event -> event.description?.contains(segment.id) ?: false }
                                 .also {
                                     if (it.size > 1) {
-                                        this@TwitchNotificationExtension.logger.warnF { "found ${it.size} events for segment $segment" }
+                                        this@TwitchExtension.logger.warnF { "found ${it.size} events for segment $segment" }
                                     }
                                 }
                         }
 
                         val notMatchingEvents = existingEvents
-                            .filter { event -> event.creatorId == this@TwitchNotificationExtension.kord.selfId }
+                            .filter { event -> event.creatorId == this@TwitchExtension.kord.selfId }
                             .toSet() - segmentsWithEvents.values.flatten().toSet()
 
 
@@ -502,7 +500,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                         }
 
                         launch(
-                            this@TwitchNotificationExtension.kord.coroutineContext
+                            this@TwitchExtension.kord.coroutineContext
                                     + CoroutineName("events-create-${userData.login}")
                         ) {
                             val createdEvents = segmentsToCreateEventsFor.map { segment ->
@@ -523,11 +521,11 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                         location = "https://twitch.tv/${userData.login}".optional()
                                     )
                                 }.also { event ->
-                                    this@TwitchNotificationExtension.logger.infoF { "created event ${event.id} for segment $segment" }
+                                    this@TwitchExtension.logger.infoF { "created event ${event.id} for segment $segment" }
                                 }
                             }
 
-                            this@TwitchNotificationExtension.logger.infoF { "done creating events" }
+                            this@TwitchExtension.logger.infoF { "done creating events" }
                             followUp.edit {
                                 content = listOfNotNull(
                                     "found ${segments.size} segments",
@@ -541,10 +539,10 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                 )
                                     .joinToString("\n")
                                     .also {
-                                        this@TwitchNotificationExtension.logger.infoF { "message: \n$it" }
+                                        this@TwitchExtension.logger.infoF { "message: \n$it" }
                                     }
                             }
-                            this@TwitchNotificationExtension.logger.infoF { "followup edited" }
+                            this@TwitchExtension.logger.infoF { "followup edited" }
                         }
 
                     }
@@ -559,7 +557,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     Permission.ManageEvents,
                 )
                 check {
-                    with(config) { requiresBotControl() }
+                    with(configurationExtension) { requiresBotControl() }
                 }
 
                 action {
@@ -619,7 +617,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                             .toList().distinct()
 
                         segments.forEach {
-                            this@TwitchNotificationExtension.logger.debugF { it }
+                            this@TwitchExtension.logger.debugF { it }
                         }
 
                         if (segments.isNotEmpty()) {
@@ -646,34 +644,6 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
             }
         }
-
-//        event<ReadyEvent> {
-//            action {
-//                withContext(
-//                    logContext(
-//                        "event" to event::class.simpleName,
-//                        "extension" to name
-//                    )
-//                ) {
-//                    logger.infoF { "launching twitch background job" }
-//                    backgroundJob = kord.launch(
-//                        logContext(
-//                            "event" to "TwitchLoop"
-//                        ) + CoroutineName("TwitchLoop")
-//                    ) {
-//                        while (true) {
-//                            delay(15_000)
-//                            val token = httpClient.getToken()
-//                            if (token != null) {
-//                                checkStreams(kord.guilds.toList(), token)
-//                            } else {
-//                                logger.errorF { "failed to acquire token" }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
     }
 
     private suspend fun add(
@@ -701,15 +671,24 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             )
         }
 
-        database.twitchConfigQueries.upsert(
-            guildId = guild.id,
-            channel = channel.id,
+        val configUnit = guild.config()
+        val config = configUnit.get() ?: TwitchGuildConfig()
+
+        val newEntry = TwitchConfig(
+            channelId = channel.id,
             twitchUserName = user.login,
-            role = arguments.role.id,
-            message = null
+            roleId = arguments.role.id,
+            messageId = null
         )
 
-        return "added `${user.displayName}` <https://twitch.tv/${user.login}> to ${channelInput.mention} to notify ${arguments.role.mention}"
+        configUnit.save(
+            config.update(
+                newEntry.key(channel),
+                newEntry
+            )
+        )
+
+        return "added `${user.displayName}` <https://twitch.tv/${user.login}> to notify ${arguments.role.mention} in ${channelInput.mention}"
     }
 
     private suspend fun remove(guild: Guild, arguments: TwitchRemoveArgs, currentChannel: ChannelBehavior): String {
@@ -718,20 +697,23 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
             ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
-        val toRemove = database.twitchConfigQueries.get(
-            guildId = guild.id,
-            channel = channel.id,
+        val configUnit = guild.config()
+        val twitchGuildConfig = configUnit.get() ?: TwitchGuildConfig()
+        val (key, toRemove) = twitchGuildConfig.find(
+            channelId = channel.id,
             twitchUserName = arguments.twitchUserName
-        ).executeAsOneOrNull()
+        ) ?: relayError("twitch config entry not found")
 
-        toRemove?.message?.let {
-            channel.deleteMessage(it)
+        try {
+            toRemove.messageId?.let {
+                channel.deleteMessage(it)
+            }
+        } catch (e: KtorRequestException) {
+            logger.warnF { "failed to delete message" }
         }
 
-        database.twitchConfigQueries.delete(
-            guildId = guild.id,
-            channel = channel.id,
-            twitchUserName = arguments.twitchUserName
+        configUnit.save(
+            configUnit.get()?.remove(key) ?: relayError("failed to save config")
         )
 
         return "removed ${arguments.twitchUserName} from ${channel.mention}"
@@ -749,7 +731,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                     webhooksCache[channel.id] = webhook
                 } ?: channel.createWebhook(name = webhookName) {
                     avatar = Image.raw(
-                        data = TwitchNotificationExtension::class.java
+                        data = TwitchExtension::class.java
                             .getResourceAsStream("/twitch/TwitchGlitchPurple.png")
                             ?.readBytes() ?: error("failed to read bytes"),
                         format = Image.Format.PNG,
@@ -767,6 +749,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
     private suspend fun updateTwitchNotificationMessage(
         guild: Guild,
+        key: String,
         twitchConfig: TwitchConfig,
         token: Token,
         userData: TwitchUserData,
@@ -776,7 +759,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         webhook: Webhook,
     ) {
         val channel = twitchConfig.channel(guild)
-//        logger.traceF { "updating ${twitchConfig.twitchUserName} in ${channel.name}" }
+        logger.traceF { "updating ${twitchConfig.twitchUserName} in ${channel.name}" }
         when (channel) {
             is TextChannel, is NewsChannel -> {
             }
@@ -787,23 +770,27 @@ class TwitchNotificationExtension() : Extension(), Klogging {
         }
 
         suspend fun updateMessageId(message: Message, publish: Boolean = true) {
-//            if (publish && channel is NewsChannel && !message.isPublished) {
-//                try {
-//                    logger.infoF { "publishing in ${channel.name}" }
-//                    message.publish()
-//                } catch (e: KtorRequestException) {
-//                    logger.errorF(e) { "failed to publish" }
-//                }
-//            }
-            database.twitchConfigQueries.updateMessage(
-                message = message.id,
-                guildId = guild.id,
-                channel = channel.id,
-                twitchUserName = twitchConfig.twitchUserName
+            if (publish && channel is NewsChannel && !message.isPublished) {
+                try {
+                    logger.infoF { "publishing in ${channel.name}" }
+                    message.publish()
+                } catch (e: KtorRequestException) {
+                    logger.errorF(e) { "failed to publish" }
+                }
+            }
+            val configUnit = guild.config()
+
+            configUnit.save(
+                configUnit.get()?.update(
+                    key,
+                    twitchConfig.copy(
+                        messageId = message.id
+                    )
+                ) ?: relayError("failed to save config")
             )
         }
 
-        val oldMessage = twitchConfig.message?.let {
+        val oldMessage = twitchConfig.messageId?.let {
             channel.getMessageOrNull(it)
         } ?: findMessage(channel, userData, webhook)?.also { foundMessage ->
             updateMessageId(foundMessage, publish = false)
@@ -981,49 +968,39 @@ class TwitchNotificationExtension() : Extension(), Klogging {
     }
 
     private suspend fun convertConfig(guild: Guild) {
-        guild.channels.toList().forEach { channel ->
-            val configUnit = guild.config(channel)
+        val database: DiscordbotDatabase by inject()
+        val configUnit = guild.config()
 
-            database.getTwitchConfigs(guild)
-                .filter { twitchConfig -> twitchConfig.channel == channel.id }
-                .takeUnless { it.isEmpty() }
-                ?.also { list ->
-                    val channelConfig = TwitchChannelConfig(
-                        configurations = list.map { twitchConfig ->
-                            TwitchEntryConfig(
-                                twitchUserName = twitchConfig.twitchUserName,
-                                role = twitchConfig.role,
-                                message = twitchConfig.message,
-                            )
-                        }
-                    )
-                    configUnit.save(channelConfig).also {
-                        logger.infoF { "saved: $it" }
-                    }
+        val configs = database.getTwitchConfigs(guild)
+            .associate { twitchConfig ->
+                TwitchConfig(
+                    channelId = twitchConfig.channel,
+                    twitchUserName = twitchConfig.twitchUserName,
+                    roleId = twitchConfig.role,
+                    messageId = twitchConfig.message,
+                ).let {
+                    val channel = it.channel(guild)
+                    it.key(channel) to it
                 }
-        }
+            }
+        configUnit.save(
+            TwitchGuildConfig(
+                configs = configs
+            )
+        )
     }
 
     private suspend fun checkStreams(guilds: List<Guild>, token: Token) = coroutineScope {
-        val mappedTwitchConfigs = guilds.associateWith { guild ->
-            database.getTwitchConfigs(guild)
-        }
 
-//        val mappedConfigs = guilds.flatMap { guild ->
-//            guild.channelBehaviors
-//                .filterIsInstance<TopGuildMessageChannelBehavior>()
-//                .flatMap { channel ->
-//                    val configUnit = guild.config(channel)
-//                    val configurations = configUnit.get()?.configurations.orEmpty()
-//                    configurations.map { channel to it }
-//                }
-//        }.groupBy({ it.first }, {it.second})
+        val mappedTwitchConfigs = guilds.associateWith { guild ->
+            guild.config().reload()?.configs?.values.orEmpty()
+        }
+        val mappedTwitchConfigPairs = guilds.associateWith { guild ->
+            guild.config().reload()?.configs.orEmpty()
+        }
 
         logger.traceF { "checking twitch status for ${guilds.map { it.name }}" }
 
-//        val channels = mappedConfigs.keys.map {
-//            it.asChannel()
-//        }
         val channels = mappedTwitchConfigs.keys.flatMap { guild ->
             val twitchConfig = mappedTwitchConfigs.getValue(guild)
             twitchConfig.mapNotNull {
@@ -1044,13 +1021,13 @@ class TwitchNotificationExtension() : Extension(), Klogging {
 
         val streamDataMap = httpClient.getStreams(
             userLogins = mappedTwitchConfigs.values.flatMap {
-                it.map(TwitchConfig::twitchUserName)
+                it.map { it.twitchUserName }
             }.distinct(),
             token = token,
         )
         val userDataMap = httpClient.getUsers(
             logins = mappedTwitchConfigs.values.flatMap {
-                it.map(TwitchConfig::twitchUserName)
+                it.map { it.twitchUserName }
             }.distinct(),
             token = token,
         )
@@ -1080,63 +1057,14 @@ class TwitchNotificationExtension() : Extension(), Klogging {
             }
         }
 
-//        mappedConfigs.entries.chunked(10).forEach { chunk ->
-//            coroutineScope {
-//                chunk.forEach chunkLoop@{ (channel, twitchConfigs) ->
-//                    launch(Dispatchers.IO) {
-//                        val guild = channel.guild.asGuild()
-//                        twitchConfigs.forEach configLoop@{ twitchEntryConfig ->
-//                            val userData = userDataMap[twitchEntryConfig.twitchUserName.lowercase()] ?: return@configLoop
-//                            val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
-//                            val webhook = webhooks[channel.id] ?: return@configLoop
-//                            val streamData = streamDataMap[userData.login.lowercase()]
-//                            val gameData = gameDataMap[streamData?.gameName?.lowercase()]
-//
-//                            withContext(
-//                                logContext(
-//                                    "twitch" to userData.login,
-//                                    "guild" to guild.name,
-//                                )
-//                            ) {
-//                                try {
-//                                    withTimeout(15.seconds) {
-//                                        updateTwitchNotificationMessage(
-//                                            guild = guild,
-//                                            channel = channel.asChannel(),
-//                                            twitchEntryConfig = twitchEntryConfig,
-//                                            token = token,
-//                                            userData = userData,
-//                                            channelInfo = channelInfo,
-//                                            streamData = streamData,
-//                                            gameData = gameData,
-//                                            webhook = webhook
-//                                        )
-//                                    }
-//                                } catch (e: TimeoutCancellationException) {
-//                                    logger.errorF(e) { "timed out updating ${twitchEntryConfig.twitchUserName} $twitchEntryConfig" }
-//                                } catch (e: CancellationException) {
-//                                    logger.errorF(e) { "cancellation while updating ${twitchEntryConfig.twitchUserName} $twitchEntryConfig" }
-//                                } catch (e: DiscordRelayedException) {
-//                                    logger.errorF(e) { e.reason }
-//                                } catch (e: KtorRequestException) {
-//                                    logger.errorF(e) { "request exception when updating $twitchEntryConfig" }
-//                                } catch (e: Exception) {
-//                                    logger.errorF(e) { e.message }
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-        mappedTwitchConfigs.entries.chunked(10).forEach { chunk ->
+        mappedTwitchConfigPairs.entries.chunked(5).forEach { chunk ->
             coroutineScope {
                 chunk.forEach chunkLoop@{ (guild, twitchConfigs) ->
                     launch(Dispatchers.IO) {
-                        twitchConfigs.forEach configLoop@{ twitchConfig ->
+                        twitchConfigs.forEach configLoop@{ (key, twitchConfig) ->
                             val userData = userDataMap[twitchConfig.twitchUserName.lowercase()] ?: return@configLoop
                             val channelInfo = channelInfoMap[userData.login.lowercase()] ?: return@configLoop
-                            val webhook = webhooks[twitchConfig.channel] ?: return@configLoop
+                            val webhook = webhooks[twitchConfig.channelId] ?: return@configLoop
                             val streamData = streamDataMap[userData.login.lowercase()]
                             val gameData = gameDataMap[streamData?.gameName?.lowercase()]
 
@@ -1150,6 +1078,7 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                                     withTimeout(15.seconds) {
                                         updateTwitchNotificationMessage(
                                             guild = guild,
+                                            key = key,
                                             twitchConfig = twitchConfig,
                                             token = token,
                                             userData = userData,
@@ -1176,5 +1105,9 @@ class TwitchNotificationExtension() : Extension(), Klogging {
                 }
             }
         }
+    }
+
+    suspend fun loadConfig(guild: Guild): TwitchGuildConfig? {
+        return guild.config().get()
     }
 }

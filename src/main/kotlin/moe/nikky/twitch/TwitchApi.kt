@@ -267,32 +267,32 @@ object TwitchApi : Klogging {
             }
         }
         return try {
-            val objects = json.decodeFromJsonElement(
-                ListSerializer(JsonObject.serializer()),
-                array
-            )
-            objects.map { listElement ->
-                try {
-                    json.decodeFromJsonElement(
-                        serializer,
-                        listElement
-                    )
-                } catch (e: SerializationException) {
-                    logger.errorF(e) {
-                        "twitch data failed to list entry: \n${
-                            json.encodeToString(
-                                JsonObject.serializer(),
-                                listElement
-                            )
-                        }"
-                    }
-                    return emptyList()
-                }
-            }
-//            json.decodeFromJsonElement(
-//                ListSerializer(serializer),
+//            val objects = json.decodeFromJsonElement(
+//                ListSerializer(JsonObject.serializer()),
 //                array
 //            )
+//            objects.map { listElement ->
+//                try {
+//                    json.decodeFromJsonElement(
+//                        serializer,
+//                        listElement
+//                    )
+//                } catch (e: SerializationException) {
+//                    logger.errorF(e) {
+//                        "twitch data failed to list entry: \n${
+//                            json.encodeToString(
+//                                JsonObject.serializer(),
+//                                listElement
+//                            )
+//                        }"
+//                    }
+//                    return emptyList()
+//                }
+//            }
+            json.decodeFromJsonElement(
+                ListSerializer(serializer),
+                array
+            )
         } catch (e: SerializationException) {
             logger.errorF(e) {
                 "twitch data failed to parse key $key: \n${

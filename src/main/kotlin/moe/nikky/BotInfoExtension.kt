@@ -14,17 +14,17 @@ import dev.kord.rest.builder.message.create.embed
 import io.klogging.Klogging
 import io.ktor.http.*
 import kotlinx.coroutines.flow.count
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
-import moe.nikky.db.DiscordbotDatabase
-import moe.nikky.twitch.TwitchNotificationExtension
+import moe.nikky.twitch.TwitchExtension
 import org.koin.core.component.inject
 
 class BotInfoExtension : Extension(), Klogging {
     override val name: String = "bot-info-extension"
 
-    private val database: DiscordbotDatabase by inject()
-
-    private val config: ConfigurationExtension by inject()
+    private val configurationExtension: ConfigurationExtension by inject()
+    private val roleManagementExtension: RoleManagementExtension by inject()
+    private val twitchExtensions: TwitchExtension by inject()
 
     private val inviteUrl: String = runBlocking {
         val permission = Permissions(
@@ -69,30 +69,34 @@ class BotInfoExtension : Extension(), Klogging {
                 allowInDms = false
 
                 check {
-                    with(config) {
+                    with(configurationExtension) {
                         requiresBotControl()
                     }
                 }
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
-                        val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
+                        val guildConfig = configurationExtension.loadConfig(guild) ?: GuildConfig()
+                        val roleManagementConfig = roleManagementExtension.loadConfig(guild) ?: RoleManagementConfig()
 
                         respond {
                             val choosableRoles =
-                                roleChoosers.map { roleChooser ->
-                                    val roleMapping = database.getRoleMapping(guild, roleChooser)
-                                    "**${roleChooser.section}**:\n" + roleMapping.joinToString("\n") { (reaction, role) ->
+                                roleManagementConfig.roleChoosers.map { (key, roleChooser) ->
+                                    val roleMapping = roleChooser.roleMapping
+                                    "**${roleChooser.section}**:\n" + roleMapping.map { entry ->
+                                        val reaction = entry.reactionEmoji(guild)
+                                        val role = entry.getRole(guild)
                                         "  ${reaction.mention}: ${role.mention}"
-                                    }
+                                    }.joinToString("\n")
                                 }
                                     .joinToString("\n\n")
 
-                            val twitch = database.getTwitchConfigs(guild).map { twitchNotif ->
-                                "<${twitchNotif.twitchUrl}> ${twitchNotif.role(guild).mention} in ${
-                                    twitchNotif.channel(guild).mention
-                                }"
+                            val twitch = twitchExtensions.loadConfig(guild)?.configs?.values.orEmpty()
+                                .sortedBy { it.roleId }
+                                .sortedBy { it.channelId }
+                                .map { twitchNotif ->
+                                    val channel = twitchNotif.channel(guild)
+                                "${channel.mention} ${twitchNotif.role(guild).mention} <${twitchNotif.twitchUrl}>"
                             }.joinToString("\n")
                             content = """
                                 |adminRole: ${guildConfig.adminRole(guild)?.mention}
@@ -125,11 +129,13 @@ class BotInfoExtension : Extension(), Klogging {
                 description = "shows some numbers about (${self.username} ${self.mention})"
                 action {
                     val roleManagement: RoleManagementExtension? = getKoin().getOrNull()
-                    val twitch: TwitchNotificationExtension? = getKoin().getOrNull()
+                    val twitch: TwitchExtension? = getKoin().getOrNull()
 
                     withLogContextOptionalGuild(event, guild) { guild ->
                         respond {
-                            val guildConfigs = database.guildConfigQueries.getAll().executeAsList()
+                            val guildConfigs = this@BotInfoExtension.kord.guilds.toList().associateWith { guild ->
+                                configurationExtension.loadConfig(guild)
+                            }.toList()
 
                             run {
                                 val guilds = this@BotInfoExtension.kord.guilds.count()
@@ -149,31 +155,30 @@ class BotInfoExtension : Extension(), Klogging {
                             }
 
                             roleManagement?.run {
-                                    val roleChoosers = guildConfigs.flatMap { guildConfig ->
-                                        database.roleChooserQueries.getAll(guildId = guildConfig.guildId).executeAsList()
-                                    }
-                                    val roleMappings = roleChoosers.flatMap { config ->
-                                        database.roleMappingQueries.getAll(config.roleChooserId).executeAsList()
-                                    }
+                                val roleManagementConfigs = this@BotInfoExtension.kord.guilds.toList().mapNotNull { guild ->
+                                    roleManagementExtension.loadConfig(guild)?.takeIf { it.roleChoosers.isNotEmpty() }
+                                }
+                                val roleChoosers = roleManagementConfigs.flatMap {
+                                    it.roleChoosers.values
+                                }
+                                val roleMappings = roleChoosers.flatMap { it.roleMapping }
 
-                                    val distinctRoles = roleMappings.distinctBy() {
-                                        it.role
-                                    }.count()
-                                    val distinctEmoji = roleMappings.distinctBy() {
-                                        it.reaction
-                                    }.count()
-                                    val guilds = roleChoosers.distinctBy() {
-                                        it.guildId
-                                    }.count()
+                                val distinctRoles = roleMappings.distinctBy() {
+                                    it.role
+                                }.count()
+                                val distinctEmoji = roleMappings.distinctBy() {
+                                    it.reaction
+                                }.count()
+                                val guilds = roleManagementConfigs.size
 
-                                    val content = """
+                                val content = """
                                         |configured in `$guilds` guilds
                                         |`$distinctRoles` roles using `$distinctEmoji` distinct emojis
                                     """.trimMargin()
-                                    val pairs = listOf(
-                                        "roles" to distinctRoles,
-                                        "emojis" to distinctEmoji,
-                                    )
+                                val pairs = listOf(
+                                    "roles" to distinctRoles,
+                                    "emojis" to distinctEmoji,
+                                )
 
                                 embed {
                                     color = DISCORD_FUCHSIA
@@ -191,23 +196,25 @@ class BotInfoExtension : Extension(), Klogging {
 
                             twitch?.run {
 
-                                    val twitchConfigs = guildConfigs.flatMap { guildConfig ->
-                                        database.twitchConfigQueries.getAll(guildConfig.guildId).executeAsList()
-                                    }
-                                    val roles = twitchConfigs.distinctBy {
-                                        it.role
-                                    }.count()
-                                    val twitchUsers = twitchConfigs.distinctBy {
-                                        it.twitchUserName
-                                    }.count()
-                                    val guilds = twitchConfigs.distinctBy {
-                                        it.guildId
-                                    }.count()
+                                // FIXME migrate twitch to json as well
+                                val filteredTwitchConfigs = guildConfigs.mapNotNull { (guild, config) ->
+                                    twitch.loadConfig(guild)?.takeIf { it.configs.isNotEmpty() }
+                                }
+                                val twitchConfigs = filteredTwitchConfigs.flatMap {
+                                    it.configs.values
+                                }
+                                val roles = twitchConfigs.distinctBy {
+                                    it.roleId
+                                }.count()
+                                val twitchUsers = twitchConfigs.distinctBy {
+                                    it.twitchUserName
+                                }.count()
+                                val guilds = filteredTwitchConfigs.size
 
-                                    val pairs =  listOf(
-                                        "streams" to twitchUsers,
-                                        "roles" to roles,
-                                    )
+                                val pairs = listOf(
+                                    "streams" to twitchUsers,
+                                    "roles" to roles,
+                                )
 
                                 embed {
                                     color = twitch.color
@@ -230,32 +237,5 @@ class BotInfoExtension : Extension(), Klogging {
                 }
             }
         }
-
-//        event<MessageCreateEvent> {
-//            check {
-//                failIf("only process DMs") { event.guildId != null }
-//                failIf("do not respond to self") { event.message.author?.id == kord.selfId }
-//            }
-//            action {
-//                if (event.message.content.startsWith("invite")) {
-//                    event.message.channel.createMessage(inviteUrl)
-//                }
-//            }
-//        }
-
-//        event<GuildCreateEvent> {
-//            action {
-//                val guild = event.guild
-//                withContext(
-//                    logContext(
-//                        "guild" to "'${guild.name}'",
-//                        "guildId" to guild.id.asString,
-//                        "event" to event::class.simpleName,
-//                    )
-//                ) {
-//
-//                }
-//            }
-//        }
     }
 }

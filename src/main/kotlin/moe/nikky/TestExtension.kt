@@ -7,7 +7,6 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSub
 import com.kotlindiscord.kord.extensions.commands.converters.impl.*
 import com.kotlindiscord.kord.extensions.extensions.*
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.profileLink
 import com.kotlindiscord.kord.extensions.utils.respond
 import dev.kord.common.entity.GuildScheduledEventEntityMetadata
 import dev.kord.common.entity.GuildScheduledEventPrivacyLevel
@@ -17,15 +16,13 @@ import dev.kord.common.entity.optional.Optional
 import dev.kord.common.entity.optional.optional
 import dev.kord.core.behavior.createScheduledEvent
 import dev.kord.core.entity.Guild
-import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.message.MessageCreateEvent
-import dev.kord.rest.Image
 import io.klogging.Klogging
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimePeriod
 import kotlinx.datetime.Instant
-import moe.nikky.twitch.TwitchNotificationExtension
+import moe.nikky.twitch.TwitchExtension
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -34,7 +31,7 @@ class TestExtension : Extension(), Klogging {
     override val name: String = "test"
 
     val twitch by lazy {
-        getKoin().get<TwitchNotificationExtension>()
+        getKoin().get<TwitchExtension>()
     }
 
     override suspend fun setup() {

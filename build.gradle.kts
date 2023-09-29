@@ -77,7 +77,6 @@ dependencies {
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")
-//    implementation("io.github.oshai:kotlin-logging")
 
     implementation("io.ktor:ktor-client-logging:_")
     implementation("org.slf4j:slf4j-api:_")
@@ -107,9 +106,6 @@ sqldelight {
             verifyMigrations.set(true)
         }
     }
-//    Database { // This will be the name of the generated database class.
-//        packageName = "com.example"
-//    }
 }
 
 tasks {

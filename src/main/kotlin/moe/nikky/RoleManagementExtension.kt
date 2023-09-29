@@ -1,7 +1,6 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
-import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
@@ -10,19 +9,27 @@ import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
+import com.kotlindiscord.kord.extensions.storage.Data
+import com.kotlindiscord.kord.extensions.storage.StorageType
+import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.*
+import com.kotlindiscord.kord.extensions.utils.botHasPermissions
+import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.asJavaLocale
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.MessageFlag
 import dev.kord.common.entity.MessageFlags
 import dev.kord.common.entity.Permission
+import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.MessageBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
+import dev.kord.core.behavior.channel.asChannelOf
 import dev.kord.core.behavior.channel.createMessage
 import dev.kord.core.behavior.edit
+import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
@@ -34,14 +41,18 @@ import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
 import io.klogging.Klogging
-import kotlinx.coroutines.*
+import io.klogging.context.logContext
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
-import moe.nikky.checks.requiresBotControl
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import moe.nikky.converter.reactionEmoji
 import moe.nikky.db.DiscordbotDatabase
-import moe.nikky.db.RoleChooserConfig
 import org.koin.core.component.inject
 import org.koin.dsl.module
 import java.util.*
@@ -49,9 +60,19 @@ import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
     override val name: String = "role-management"
-    private val database: DiscordbotDatabase by inject()
     private val config: ConfigurationExtension by inject()
-    private val liveMessageJobs = mutableMapOf<Long, Job>()
+    private val liveMessageJobs = mutableMapOf<String, Job>()
+
+    private val guildConfig = StorageUnit(
+        storageType = StorageType.Config,
+        namespace = name,
+        identifier = "role-management",
+        dataType = RoleManagementConfig::class
+    )
+
+    private fun GuildBehavior.config() =
+        guildConfig
+            .withGuild(id)
 
     init {
         bot.getKoin().loadModules(
@@ -275,35 +296,46 @@ class RoleManagementExtension : Extension(), Klogging {
 
         event<GuildCreateEvent> {
             action {
+                if(event.guild.config().get() == null) {
+                    convertConfig(event.guild)
+                }
                 withLogContext(event, event.guild) { guild ->
-                    val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
+                    val config = guild.config().get() ?: return@withLogContext
 
-                    roleChoosers
-                        .map { it.channel(guild) }
-                        .distinct()
-                        .map {
-                            it.asChannel()
-                        }.forEach { channel ->
-                            val missingPermissions = requiredPermissions.filterNot { permission ->
-                                channel.botHasPermissions(permission)
-                            }
+                    val roleChoosers =
+                        config.roleChoosers // database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
 
-                            if (missingPermissions.isNotEmpty()) {
-                                val locale: Locale = guild.preferredLocale.asJavaLocale()
-                                logger.errorF {
-                                    "missing permissions in ${guild.name} #${channel.name} ${
-                                        missingPermissions.joinToString(", ") { it.translate(locale) }
-                                    }"
+                    try {
+                        roleChoosers
+                            .values
+                            .map { it.channel(guild) }
+                            .distinctBy { it.id }
+                            .forEach { channel ->
+                                val missingPermissions = requiredPermissions.filterNot { permission ->
+                                    channel.botHasPermissions(permission)
+                                }
+
+                                if (missingPermissions.isNotEmpty()) {
+                                    val locale: Locale = guild.preferredLocale.asJavaLocale()
+                                    logger.errorF {
+                                        "missing permissions in ${guild.name} #${channel.name} ${
+                                            missingPermissions.joinToString(", ") { it.translate(locale) }
+                                        }"
+                                    }
                                 }
                             }
-                        }
 
-                    roleChoosers.forEach { roleChooserConfig ->
+                    } catch (e: DiscordRelayedException) {
+                        logger.errorF(e) { e.reason }
+                        return@withLogContext
+                    }
+
+                    roleChoosers.forEach { (key, roleChooserConfig) ->
                         logger.infoF { "processing role chooser: $roleChooserConfig" }
 //                    if(rolePickerMessageState.channel !in validChannels) return@forEach
                         try {
-                            val message = getOrCreateMessage(roleChooserConfig, guild)
-                            val roleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
+                            val message = getOrCreateMessage(key, roleChooserConfig, guild)
+                            val roleMapping = roleChooserConfig.roleMapping
                             message.edit {
                                 content = buildMessage(
                                     guild,
@@ -315,14 +347,16 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
 
                             val allReactionEmojis = message.reactions.map { it.emoji }.toSet()
-                            val emojisToRemove = allReactionEmojis - roleMapping.map { it.first }.toSet()
+                            val emojisToRemove = allReactionEmojis - roleMapping.map { it.reactionEmoji(guild) }.toSet()
                             emojisToRemove.forEach { reactionEmoji ->
                                 message.deleteReaction(reactionEmoji)
                             }
                             try {
-                                roleMapping.forEach { (emoji, role) ->
-                                    message.addReaction(emoji)
-                                    val reactors = message.getReactors(emoji)
+                                roleMapping.forEach { entry ->
+                                    val reactionEmoji = entry.reactionEmoji(guild)
+                                    val role = entry.getRole(guild)
+                                    message.addReaction(reactionEmoji)
+                                    val reactors = message.getReactors(reactionEmoji)
                                     reactors.map { it.asMemberOrNull(guild.id) }
                                         .filterNotNull()
                                         .filter { member ->
@@ -359,54 +393,53 @@ class RoleManagementExtension : Extension(), Klogging {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
-        val roleChooserConfig = database.roleChooserQueries.find(
-            guildId = guild.id,
-            section = arguments.section,
-            channel = channel.id
-        ).executeAsOneOrNull()
+
+        val configUnit = guild.config()
+        val (key, roleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
             ?: run {
-                database.roleChooserQueries.upsert(
-                    guildId = guild.id,
+                RoleChooserConfig(
                     section = arguments.section,
-                    description = null,
-                    channel = channel.id,
-                    message = channel.createMessage {
-                        content ="placeholder"
+                    channelId = channel.id,
+                    messageId = channel.createMessage {
+                        content = "placeholder"
                         suppressNotifications = true
-                    }.id
-                )
-                database.roleChooserQueries.find(
-                    guildId = guild.id,
-                    section = arguments.section,
-                    channel = channel.id
-                ).executeAsOneOrNull()
-                    ?: relayError("failed to create database entry")
+                    }.id,
+                    roleMapping = emptyList()
+                ).let {
+                    it.key(channel) to it
+                }.also {
+                    configUnit.save(
+                        configUnit.get()?.update(it.first, it.second) ?: relayError("failed to save config")
+                    )
+                }
             }
 
         logger.infoF { "reaction: '${arguments.reaction}'" }
-        val reactionEmoji = arguments.reaction
 
-        val message = getOrCreateMessage(roleChooserConfig, guild)
+        val message = getOrCreateMessage(key, roleChooserConfig, guild)
 
-        database.roleMappingQueries.upsert(
-            roleChooserId = roleChooserConfig.roleChooserId,
-            reaction = reactionEmoji.mention,
-            role = arguments.role.id
+        configUnit.save(
+            configUnit.get()?.updateRoleMapping(key, arguments.reaction, arguments.role)
+                ?: relayError("failed to save config")
         )
 
-        val newRoleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
+        val (_, newRoleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
+            ?: relayError("could not find role chooser section")
+
+        val newRoleMapping = newRoleChooserConfig.roleMapping
         message.edit {
             content = buildMessage(
                 guild,
-                roleChooserConfig,
+                newRoleChooserConfig,
                 newRoleMapping,
                 flags,
             )
         }
-        newRoleMapping.forEach { (reactionEmoji, _) ->
+        newRoleMapping.forEach { entry ->
+            val reactionEmoji = entry.reactionEmoji(guild)
             message.addReaction(reactionEmoji)
         }
-        liveMessageJobs[roleChooserConfig.roleChooserId]?.cancel()
+        liveMessageJobs[roleChooserConfig.key(channel)]?.cancel()
         startOnReaction(
             guild,
             message,
@@ -414,7 +447,7 @@ class RoleManagementExtension : Extension(), Klogging {
             newRoleMapping
         )
 
-        return "added new role mapping ${reactionEmoji.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
+        return "added new role mapping ${arguments.reaction.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
     }
 
     private suspend fun list(
@@ -426,29 +459,29 @@ class RoleManagementExtension : Extension(), Klogging {
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
-        val roleChoosers = database.roleChooserQueries.getAllFromChannel(
-            guildId = guild.id,
-            channel = channel.id,
-        ).executeAsList()
+        val configUnit = guild.config()
+
+        val roleChoosers = configUnit.get()?.list(channelId = channel.id)
+            ?: relayError("failed to load config")
 
         return roleChoosers.map { roleChooserConfig ->
             val message = roleChooserConfig.getMessageOrRelayError(guild)
 
-            val newRoleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
 
-            val mappings = newRoleMapping.map { (k, v) ->
-                "\n  ${k.mention} => ${v.mention}"
+            val newRoleMapping = roleChooserConfig.roleMapping
+
+            val mappings = newRoleMapping.map { entry ->
+                val reactionEmoji = entry.reactionEmoji(guild)
+                val role = entry.getRole(guild)
+                "\n  ${reactionEmoji.mention} => ${role.mention}"
             }.joinToString("")
 
             listOf(
                 "section: `${roleChooserConfig.section}`",
-                "description: ${roleChooserConfig.description}",
                 "mapping: $mappings",
                 "message: ${message?.getJumpUrl()}",
             ).joinToString("\n")
         }.joinToString("\n\n")
-
-//        return "added new role mapping ${reactionEmoji.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
     }
 
     private suspend fun remove(
@@ -461,41 +494,37 @@ class RoleManagementExtension : Extension(), Klogging {
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
-        val roleChooserConfig = database.roleChooserQueries.find(
-            guildId = guild.id,
-            section = arguments.section,
-            channel = channel.id
-        ).executeAsOneOrNull()
-            ?: relayError("no roleselection section ${arguments.section}")
+        val configUnit = guild.config()
+
+        val (key, roleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
+            ?: relayError("no role selection section ${arguments.section}")
 
         logger.infoF { "reaction: '${arguments.reaction}'" }
         val reactionEmoji = arguments.reaction
 
-        val roleMapping = database.getRoleMapping(guild, roleChooserConfig)
+        val roleMapping = roleChooserConfig.roleMapping // database.getRoleMapping(guild, roleChooserConfig)
         if (roleMapping.isEmpty()) {
-            database.roleChooserQueries.delete(
-                guildId = guild.id,
-                section = arguments.section,
-                channel = channel.id
+            configUnit.save(
+                configUnit.get()?.delete(key) ?: relayError("failed to save config")
             )
             val message = roleChooserConfig.getMessageOrRelayError(guild)
             message?.delete()
 
             return "removed role section"
         }
-        val removedRole = roleMapping.getByEmoji(reactionEmoji) ?: relayError("no role exists for ${reactionEmoji.mention}")
+        val removedRoleId =
+            roleMapping.getByEmoji(reactionEmoji) ?: relayError("no role exists for ${reactionEmoji.mention}")
 
-        val message = getOrCreateMessage(roleChooserConfig, guild)
+        val message = getOrCreateMessage(key, roleChooserConfig, guild)
 
-        database.roleMappingQueries.delete(
-            roleChooserId = roleChooserConfig.roleChooserId,
-            reaction = reactionEmoji.mention
+        configUnit.save(
+            configUnit.get()?.deleteRoleMapping(key, reactionEmoji) ?: relayError("failed to save config")
         )
         message.edit {
             content = buildMessage(
                 guild,
                 roleChooserConfig,
-                database.getRoleMapping(guild, roleChooserConfig),
+                roleChooserConfig.roleMapping,
                 flags,
             )
         }
@@ -505,18 +534,16 @@ class RoleManagementExtension : Extension(), Klogging {
             }.map { user ->
                 user.asMember(guild.id)
             }.filter { member ->
-                removedRole.id in member.roleIds
+                removedRoleId in member.roleIds
             }.collect { member ->
-                member.removeRole(removedRole.id)
+                member.removeRole(removedRoleId)
             }
         message.asMessage().deleteReaction(reactionEmoji)
 
-        val newRoleMapping = database.getRoleMapping(guild, roleChooserConfig)
+        val newRoleMapping = configUnit.get()!!.roleChoosers[key]!!.roleMapping
         if (newRoleMapping.isEmpty()) {
-            database.roleChooserQueries.delete(
-                guildId = guild.id,
-                section = arguments.section,
-                channel = channel.id
+            configUnit.save(
+                configUnit.get()!!.delete(key)
             )
             message.delete()
 
@@ -530,47 +557,43 @@ class RoleManagementExtension : Extension(), Klogging {
         arguments: RenameSectionArg,
         currentChannel: ChannelBehavior,
     ): String {
-        val kord = this@RoleManagementExtension.kord
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
+        val configUnit = guild.config()
+        val roleManagementConfig = configUnit.get() ?: RoleManagementConfig()
+
         run {
-            val shouldNotExist = database.roleChooserQueries.find(
-                guildId = guild.id,
-                section = arguments.newSection,
-                channel = channel.id,
-            ).executeAsOneOrNull()
+            val shouldNotExist = roleManagementConfig.roleChoosers.entries.firstOrNull { (key, entry) ->
+                entry.section == arguments.newSection && entry.channelId == channel.id
+            }
 
             if (shouldNotExist != null) {
                 relayError("section ${arguments.newSection} already exists")
             }
         }
 
-        val roleChooserConfig = database.roleChooserQueries.find(
-            guildId = guild.id,
-            section = arguments.oldSection,
-            channel = channel.id
-        ).executeAsOneOrNull()
-            ?: relayError("no roleselection section ${arguments.oldSection}")
-
-        val message = getOrCreateMessage(roleChooserConfig, guild)
-
-        database.roleChooserQueries.updateSection(
+        val (key, roleChooserConfig) = configUnit.get()!!.find(
             section = arguments.newSection,
-            roleChooserId = roleChooserConfig.roleChooserId,
-        )
-        val newRoleChooserConfig = database.roleChooserQueries.find(
-            guildId = guild.id,
-            section = arguments.newSection,
-            channel = channel.id
-        ).executeAsOneOrNull()
-            ?: relayError("no roleselection section ${arguments.newSection}")
+            channelId = channel.id
+        ) ?: relayError("no roleselection section ${arguments.oldSection}")
 
-        val newRoleMapping = database.getRoleMapping(
-            guild,
-            roleChooser = newRoleChooserConfig
+        val message = getOrCreateMessage(key, roleChooserConfig, guild)
+
+        configUnit.save(
+            configUnit.get()?.updateSection(
+                key = key,
+                section = arguments.newSection,
+            ) ?: relayError("failed to update config")
         )
+
+        val (_, newRoleChooserConfig) = configUnit.get()!!.find(
+            section = arguments.newSection,
+            channelId = channel.id
+        ) ?: relayError("no roleselection section ${arguments.newSection}")
+
+        val newRoleMapping = newRoleChooserConfig.roleMapping
 
         message.edit {
             content = buildMessage(
@@ -586,6 +609,7 @@ class RoleManagementExtension : Extension(), Klogging {
     }
 
     private suspend fun getOrCreateMessage(
+        key: String,
         roleChooserConfig: RoleChooserConfig,
         guild: Guild,
         sectionName: String = roleChooserConfig.section,
@@ -600,30 +624,36 @@ class RoleManagementExtension : Extension(), Klogging {
                         suppressNotifications = true
                     }
                     .also {
-                        database.roleChooserQueries.updateMessage(
-                            message = it.id,
-                            roleChooserId = roleChooserConfig.roleChooserId
+                        val config = guild.config()
+
+                        config.save(
+                            config.get()?.updateMessage(key, it.id) ?: relayError("failed to save config")
                         )
                     }
             }
         return message
     }
-    private fun buildMessage(
+
+    private suspend fun buildMessage(
         guild: Guild,
         roleChooserConfig: RoleChooserConfig,
-        roleMapping: List<Pair<ReactionEmoji, Role>>,
+        roleMapping: List<RoleMappingConfig>,
         flags: MessageFlags?,
     ): String {
         return if (flags?.contains(MessageFlag.SuppressNotifications) == true) {
             "**${roleChooserConfig.section}** : \n" + roleMapping
-                .joinToString("\n") { (reactionEmoji, role) ->
-                    "${reactionEmoji.mention} ${role.mention}"
+                .map { entry ->
+                    val role = guild.getRole(entry.role)
+                    "${entry.reaction} ${role.mention}"
                 }
+                .joinToString("\n")
         } else {
             "**${roleChooserConfig.section}** : \n" + roleMapping
-                .joinToString("\n") { (reactionEmoji, role) ->
-                    "${reactionEmoji.mention} `${role.name}`"
+                .map { entry ->
+                    val role = guild.getRole(entry.role)
+                    "${entry.reaction} `${role.name}`"
                 }
+                .joinToString("\n")
         }
     }
 
@@ -632,10 +662,11 @@ class RoleManagementExtension : Extension(), Klogging {
         guildBehavior: GuildBehavior,
         message: MessageBehavior,
         rolePickerMessageState: RoleChooserConfig,
-        roleMapping: List<Pair<ReactionEmoji, Role>>,
+        roleMapping: List<RoleMappingConfig>,
     ) {
         val job = Job()
-        liveMessageJobs[rolePickerMessageState.roleChooserId] = job
+        val channel = message.channel.asChannelOf<TextChannel>()
+        liveMessageJobs[rolePickerMessageState.key(channel)] = job
         message.asMessage().live(
             CoroutineScope(
                 job
@@ -645,18 +676,133 @@ class RoleManagementExtension : Extension(), Klogging {
             onReactionAdd { event ->
                 if (event.userId == kord.selfId) return@onReactionAdd
                 val role = roleMapping.getByEmoji(event.emoji) ?: return@onReactionAdd
-                event.userAsMember?.addRole(role.id)
+                event.userAsMember?.addRole(role)
             }
             onReactionRemove { event ->
                 if (event.userId == kord.selfId) return@onReactionRemove
                 val role = roleMapping.getByEmoji(event.emoji) ?: return@onReactionRemove
-                event.userAsMember?.removeRole(role.id)
+                event.userAsMember?.removeRole(role)
             }
         }
     }
 
+    private suspend fun convertConfig(guild: Guild) {
+        val database: DiscordbotDatabase by inject()
+        val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
 
+        val roleManagementConfig = roleChoosers.mapNotNull { roleChooserConfig ->
+            try {
+                logger.infoF { "processing role chooser: $roleChooserConfig" }
+                val roleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
+
+                val channel = roleChooserConfig.channel(guild)
+
+                val roleMappingConfig = roleMapping.map { (emoji, role) ->
+                    RoleMappingConfig(
+                        reaction = emoji.mention,
+                        role = role.id,
+                        roleName = role.name
+                    )
+                }
+
+                val config = RoleChooserConfig(
+                    section = roleChooserConfig.section,
+//                    description = roleChooserConfig.description,
+                    channelId = channel.id,
+                    messageId = roleChooserConfig.message,
+                    roleMapping = roleMappingConfig
+                )
+
+                config.key(channel) to config
+
+            } catch (e: DiscordRelayedException) {
+                logger.errorF(e) { e.reason }
+                null
+            }
+        }.toMap()
+
+        guild.config().save(
+            RoleManagementConfig(
+                roleChoosers = roleManagementConfig
+            )
+        )
+    }
+
+    suspend fun loadConfig(guild: GuildBehavior): RoleManagementConfig? {
+        return guild.config().get()
+    }
 }
+
+@Serializable
+//@Suppress("DataClassShouldBeImmutable", "MagicNumber")
+data class RoleManagementConfig(
+    val roleChoosers: Map<String, RoleChooserConfig> = emptyMap(),
+) : Data {
+    fun update(key: String, newValue: RoleChooserConfig): RoleManagementConfig {
+        return copy(roleChoosers = roleChoosers + (key to newValue))
+    }
+    fun updateMessage(key: String, messageId: Snowflake): RoleManagementConfig? {
+        val newValue = roleChoosers[key]?.copy(
+            messageId = messageId
+        ) ?: run {
+            return null
+        }
+
+        return copy(roleChoosers = roleChoosers + (key to newValue))
+    }
+    fun updateSection(key: String, section: String): RoleManagementConfig? {
+        val newValue = roleChoosers[key]?.copy(
+            section = section
+        ) ?: run {
+            return null
+        }
+
+        return copy(roleChoosers = roleChoosers + (key to newValue))
+    }
+
+    fun find(section: String, channelId: Snowflake): Pair<String, RoleChooserConfig>? {
+        return roleChoosers.entries.firstOrNull { (key, value) ->
+            value.section == section && value.channelId == channelId
+        }?.let {
+            (key, value) -> key to value
+        }
+    }
+
+    fun delete(key: String): RoleManagementConfig {
+        return copy(roleChoosers = roleChoosers - key)
+    }
+
+    fun deleteRoleMapping(key: String, emoji: ReactionEmoji): RoleManagementConfig? {
+        val oldRoleChooser = roleChoosers[key]?: run {
+            return null
+        }
+
+        val newValue = oldRoleChooser.copy(
+            roleMapping = oldRoleChooser.roleMapping.filter { it.reaction != emoji.mention }
+        )
+
+        return copy(roleChoosers = roleChoosers + (key to newValue))
+    }
+    fun updateRoleMapping(key: String, emoji: ReactionEmoji, role: Role): RoleManagementConfig? {
+        val oldRoleChooser = deleteRoleMapping(key, emoji)?.roleChoosers?.get(key) ?: run {
+            return null
+        }
+
+        val newValue = oldRoleChooser.copy(
+            roleMapping = oldRoleChooser.roleMapping + RoleMappingConfig(emoji.mention, role.id, role.name)
+        )
+
+        return copy(roleChoosers = roleChoosers + (key to newValue))
+    }
+
+    fun list(channelId: Snowflake): List<RoleChooserConfig> {
+        return roleChoosers.values.filter { it.channelId == channelId }
+    }
+}
+
+
+private fun List<RoleMappingConfig>.getByEmoji(emoji: ReactionEmoji): Snowflake? =
+    firstOrNull { it.reaction == emoji.mention }?.role
 
 private fun List<Pair<ReactionEmoji, Role>>.getByEmoji(emoji: ReactionEmoji): Role? =
     firstOrNull { it.first == emoji }?.second

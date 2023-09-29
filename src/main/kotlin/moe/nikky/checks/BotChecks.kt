@@ -6,43 +6,17 @@ import com.kotlindiscord.kord.extensions.checks.types.CheckContext
 import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
+import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.logger
+import moe.nikky.ConfigurationExtension
 import moe.nikky.adminRole
 import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.relayError
 import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
-
-suspend fun CheckContext<InteractionCreateEvent>.requiresBotControl(database: DiscordbotDatabase) {
-    requiresBotControl(database, event.getLocale())
-}
-
-suspend fun CheckContext<Event>.requiresBotControl(database: DiscordbotDatabase, locale: Locale) {
-    val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
-    val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
-
-    anyCheck(
-        {
-            hasPermission(Permission.Administrator)
-        },
-        {
-            hasRoleNullable { event ->
-                guildConfig.adminRole(guild)
-            }
-        }
-    )
-    if (!passed) {
-        val adminRole = guildConfig.adminRole(guild)
-        fail(
-            "must have permission: **${Permission.Administrator.translate(locale)}**"
-                    + (adminRole?.let { "\nor role: ** ${it.mention}**" }
-                ?: "\nand no adminrole is configured")
-        )
-    }
-}
 
 suspend fun CheckContext<InteractionCreateEvent>.hasPermissions(vararg permissions: Permission) {
     val locale = event.getLocale()

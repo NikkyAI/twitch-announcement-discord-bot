@@ -21,12 +21,13 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import moe.nikky.db.*
-import moe.nikky.twitch.TwitchEntryConfig
 import java.io.File
 import java.sql.SQLException
 
-private val logger = logger("moe.nikky.ConfigExtensions")
+private val logger = logger(object{}.javaClass.enclosingClass.canonicalName)
 
+
+@Deprecated("stop using the database")
 fun DiscordbotDatabase.Companion.load(): DiscordbotDatabase = runBlocking {
     try {
         Class.forName("org.sqlite.JDBC")
@@ -44,11 +45,11 @@ fun DiscordbotDatabase.Companion.load(): DiscordbotDatabase = runBlocking {
     }
     val database = DiscordbotDatabase(
         driver = driver,
-        guildConfigAdapter = GuildConfig.Adapter(
+        guildConfigAdapter = moe.nikky.db.GuildConfig.Adapter(
             guildIdAdapter = snowFlakeAdapter,
             adminRoleAdapter = snowFlakeAdapter,
         ),
-        roleChooserConfigAdapter = RoleChooserConfig.Adapter(
+        roleChooserConfigAdapter = moe.nikky.db.RoleChooserConfig.Adapter(
             guildIdAdapter = snowFlakeAdapter,
             channelAdapter = snowFlakeAdapter,
             messageAdapter = snowFlakeAdapter
@@ -86,11 +87,14 @@ fun DiscordbotDatabase.Companion.load(): DiscordbotDatabase = runBlocking {
     database
 }
 
+@Deprecated("stop using the database")
 fun DiscordbotDatabase.getTwitchConfigs(guild: Guild): List<TwitchConfig> {
     return twitchConfigQueries.getAll(guild.id).executeAsList()
 }
 
-suspend fun DiscordbotDatabase.getRoleMapping(guildBehavior: GuildBehavior, roleChooser: RoleChooserConfig): List<Pair<ReactionEmoji, Role>> {
+
+@Deprecated("stop using the database")
+suspend fun DiscordbotDatabase.getRoleMapping(guildBehavior: GuildBehavior, roleChooser: moe.nikky.db.RoleChooserConfig): List<Pair<ReactionEmoji, Role>> {
     val roleMapping = roleMappingQueries.getAll(roleChooser.roleChooserId).executeAsList().associate { roleChooserMapping ->
         roleChooserMapping.reaction to roleChooserMapping.role
     }
@@ -102,7 +106,7 @@ suspend fun DiscordbotDatabase.getRoleMapping(guildBehavior: GuildBehavior, role
     }
 }
 
-suspend fun GuildConfig.adminRole(guildBehavior: GuildBehavior): Role? {
+suspend fun moe.nikky.db.GuildConfig.adminRole(guildBehavior: GuildBehavior): Role? {
     return adminRole?.let { guildBehavior.getRoleOrNull(it) }
 }
 
@@ -123,7 +127,7 @@ suspend fun TwitchConfig.channel(guildBehavior: Guild): TopGuildMessageChannel {
 }
 
 
-suspend fun RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
+suspend fun moe.nikky.db.RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
     return withContext(
         logContext("guild" to guildBehavior.name)
     ) {
@@ -132,7 +136,8 @@ suspend fun RoleChooserConfig.channel(guildBehavior: Guild): TextChannel {
     }
 }
 
-suspend fun RoleChooserConfig.getMessageOrRelayError(guildBehavior: Guild): Message? = try {
+
+suspend fun moe.nikky.db.RoleChooserConfig.getMessageOrRelayError(guildBehavior: Guild): Message? = try {
     channel(guildBehavior).getMessageOrNull(message)
 } catch (e: KtorRequestException) {
     logger.errorF { e.message }

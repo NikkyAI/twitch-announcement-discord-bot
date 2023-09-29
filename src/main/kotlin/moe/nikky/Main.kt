@@ -1,12 +1,9 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.ExtensibleBot
-import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.i18n.SupportedLocales
 import com.kotlindiscord.kord.extensions.modules.extra.phishing.extPhishing
-import com.kotlindiscord.kord.extensions.modules.extra.pluralkit.extPluralKit
-import com.kotlindiscord.kord.extensions.storage.StorageType
-import com.kotlindiscord.kord.extensions.storage.StorageUnit
+import com.kotlindiscord.kord.extensions.storage.DataAdapter
 import com.kotlindiscord.kord.extensions.utils.env
 import com.kotlindiscord.kord.extensions.utils.envOrNull
 import com.kotlindiscord.kord.extensions.utils.getKoin
@@ -22,15 +19,12 @@ import io.klogging.sending.STDOUT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.debug.DebugProbes
 import moe.nikky.db.DiscordbotDatabase
-import moe.nikky.twitch.TwitchNotificationExtension
-import org.koin.core.qualifier.Qualifier
-import org.koin.core.qualifier.named
+import moe.nikky.twitch.TwitchExtension
 import org.koin.dsl.module
 import java.io.File
 import java.security.Security
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.time.ExperimentalTime
 
 private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }
@@ -70,7 +64,7 @@ suspend fun main() {
             add(::BotInfoExtension)
             add(::DiceExtension)
             add(::RoleManagementExtension)
-            add(::TwitchNotificationExtension)
+            add(::TwitchExtension)
             add(::LocalTimeExtension)
             if (TEST_GUILD_ID != null) {
                 add(::TestExtension)
@@ -84,7 +78,7 @@ suspend fun main() {
             extPhishing {
                 appName = "Yuno"
             }
-            extPluralKit()
+//            extPluralKit()
         }
         presence {
             status = PresenceStatus.Idle
@@ -164,6 +158,7 @@ private fun registerKoinModules() {
     getKoin().loadModules(
         listOf(
             module {
+                single<DataAdapter<*>> { JsonDataAdapter() }
                 single { DiscordbotDatabase.load() }
             }
         )
