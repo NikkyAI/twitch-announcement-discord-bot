@@ -174,7 +174,7 @@ class LocalTimeExtension : Extension(), Klogging {
                 } else null
             } ?: ""
             val formattedTime = formatTime(now, targetConfig.timezone)
-            return "Time in ${targetUser.mention}'s timezone: `$formattedTime`$difference"
+            return "Time in ${targetUser.mention}'s timezone: `$formattedTime` (`${targetConfig.timezoneId}`)$difference"
         }
     }
 
