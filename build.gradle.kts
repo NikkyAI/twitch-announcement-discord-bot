@@ -74,7 +74,7 @@ dependencies {
     implementation("app.cash.sqldelight:primitive-adapters:_")
     implementation("app.cash.sqldelight:coroutines-extensions:_")
 
-    implementation(Square.okio)
+//    implementation(Square.okio)
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")

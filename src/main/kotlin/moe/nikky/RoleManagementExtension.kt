@@ -1,26 +1,39 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
+import com.kotlindiscord.kord.extensions.checks.anyGuild
+import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.commands.Arguments
+import com.kotlindiscord.kord.extensions.commands.CommandContext
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
+import com.kotlindiscord.kord.extensions.commands.converters.impl.ColorConverter
+import com.kotlindiscord.kord.extensions.commands.converters.impl.boolean
+import com.kotlindiscord.kord.extensions.commands.converters.impl.color
+import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingBoolean
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
+import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalColor
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.extensions.event
+import com.kotlindiscord.kord.extensions.parsers.ColorParser
 import com.kotlindiscord.kord.extensions.storage.Data
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.types.respond
+import com.kotlindiscord.kord.extensions.utils.any
 import com.kotlindiscord.kord.extensions.utils.botHasPermissions
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.permissionsForMember
 import com.kotlindiscord.kord.extensions.utils.translate
+import dev.kord.common.Color
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.asJavaLocale
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.MessageFlag
 import dev.kord.common.entity.MessageFlags
+import dev.kord.common.entity.OverwriteType
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
@@ -28,18 +41,24 @@ import dev.kord.core.behavior.MessageBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.asChannelOf
 import dev.kord.core.behavior.channel.createMessage
+import dev.kord.core.behavior.channel.editMemberPermission
+import dev.kord.core.behavior.channel.editRolePermission
+import dev.kord.core.behavior.createRole
 import dev.kord.core.behavior.edit
 import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
+import dev.kord.core.entity.channel.GuildChannel
+import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
+import io.github.xn32.json5k.Json5
 import io.klogging.Klogging
 import io.klogging.context.logContext
 import kotlinx.coroutines.CoroutineName
@@ -49,8 +68,14 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.toSet
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.decodeFromString
 import moe.nikky.converter.reactionEmoji
 import moe.nikky.db.DiscordbotDatabase
 import org.koin.core.component.inject
@@ -154,11 +179,45 @@ class RoleManagementExtension : Extension(), Klogging {
         }
     }
 
-    @OptIn(ExperimentalTime::class)
+    inner class CreateRoleArg : Arguments() {
+        val name by string {
+            name = "name"
+            description = "role name"
+        }
+        val color by optionalColor {
+            name = "color"
+            description = "role color"
+        }
+        val mentionable by defaultingBoolean {
+            name = "mentionable"
+            description = "pingable"
+            defaultValue = false
+        }
+    }
+
+
+    inner class CreateEmojiArg : Arguments() {
+        val name by string {
+            name = "name"
+            description = "emoji name"
+        }
+        val color by color {
+            name = "color"
+            description = "emoji color"
+        }
+    }
+
+    inner class ImportRoleArg : Arguments() {
+        val data by string {
+            name = "data"
+            description = "json5 encoded role data"
+        }
+    }
+
     override suspend fun setup() {
         ephemeralSlashCommand {
-            name = "role"
-            description = "Add or remove roles"
+            name = "reactionRole"
+            description = "manage reaction roles"
             allowInDms = false
             requireBotPermissions(Permission.ManageRoles)
 
@@ -192,7 +251,7 @@ class RoleManagementExtension : Extension(), Klogging {
 
             ephemeralSubCommand(::ListRoleArg) {
                 name = "list"
-                description = "lists all "
+                description = "lists all configured reaction roles"
 
                 check {
                     with(config) { requiresBotControl() }
@@ -287,10 +346,145 @@ class RoleManagementExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         respond {
+
+//                            val globalPerms = guild.getMember(this@RoleManagementExtension.kord.selfId).getPermissions()
+//
+//                            val perms = channel
+//                                .asChannelOf<GuildChannel>()
+//                                .permissionsForMember(this@RoleManagementExtension.kord.selfId)
+//
+//                            val globalPermsString = globalPerms.values
+//                                .joinToString("\n")
+//                            val permsString = perms.values
+//                                .joinToString("\n")
+//
+//
+//                            val textChannel = channel
+//                                .asChannelOf<TextChannel>()
+
+
+//                            val permsOverrides = channel
+//                                .asChannelOf<GuildChannel>()
+//                                .data.permissionOverwrites
+//                                .value
+//                                ?.map { overwrite ->
+//                                    val target = when(overwrite.type) {
+//                                        OverwriteType.Role -> guild.getRoleOrNull(overwrite.id)?.mention
+//                                        OverwriteType.Member -> guild.getMemberOrNull(overwrite.id)?.mention
+//                                        else -> null
+//                                    } ?: "`${overwrite.id}` (`${overwrite.type}`)"
+//                                    val allows = overwrite.allow.values.joinToString("\n") { "+ $it ${it.shift}" }
+//                                    val denies = overwrite.deny.values.joinToString("\n") { "- $it ${it.shift}" }
+//
+//                                    """
+//                                        |$target `$target`
+//                                        |```diff
+//                                        |$allows
+//                                        |$denies
+//                                        |```
+//                                    """.trimMargin()
+//                                }?.joinToString("\n")
+
+//                            content = """
+//                                $permsString
+//
+//                                $globalPermsString
+//
+//                                $permsOverrides
+//                                """.trimIndent()
+//                            content = permsOverrides
                             content = "OK"
                         }
                     }
                 }
+            }
+        }
+
+        ephemeralSlashCommand {
+            name = "role"
+            description = "create a new role"
+            allowInDms = false
+            requireBotPermissions(Permission.ManageRoles)
+
+            ephemeralSubCommand(::CreateRoleArg) {
+                name = "create"
+                description = "creates a new role"
+
+                requireBotPermissions(
+                    Permission.ManageRoles,
+                )
+                check {
+                    with(config) { requiresBotControl() }
+                }
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        if(guild.roles.any { it.name == arguments.name }) {
+                            relayError("a role with that name already exists")
+                        }
+                        val role = guild.createRole {
+                            name = arguments.name
+                            color = arguments.color
+                            mentionable = arguments.mentionable
+                            hoist = false
+                        }
+
+                        respond {
+                            content = "created ${role.mention}"
+                        }
+                    }
+                }
+            }
+
+
+            ephemeralSubCommand(::ImportRoleArg) {
+                name = "import"
+                description = "creates many roles"
+
+                requireBotPermissions(
+                    Permission.ManageRoles,
+                )
+                check {
+                    with(config) { requiresBotControl() }
+                }
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val json5 = Json5 {
+
+                        }
+                        val data = json5.decodeFromString(MapSerializer(String.serializer(), String.serializer()), arguments.data)
+                        val duplicates = guild.roles.filter { it.name in data.keys }.toList()
+                        if(duplicates.isNotEmpty()) {
+                            relayError(
+                                "roles with the following roles already exist: ${duplicates.joinToString(" ") { it.mention }}"
+                            )
+                        }
+                        val roles = data.map { (roleName, roleColor) ->
+                            val parsedColor = parseColor(roleColor, this@action)
+                            guild.createRole {
+                                name = roleName
+                                color = parsedColor
+                                mentionable = false
+                                hoist = false
+                            }
+                        }
+
+                        respond {
+                            content = "created ${roles.joinToString(" ") { it.mention }}"
+                        }
+                    }
+                }
+            }
+        }
+
+
+        ephemeralSlashCommand(::CreateEmojiArg) {
+            name = "colorEmoji"
+            description = "creates emoji from color"
+
+            action {
+
             }
         }
 
@@ -343,7 +537,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                     guild,
                                     roleChooserConfig,
                                     roleMapping,
-                                    flags,
+                                    message.flags,
                                 )
                                 logger.infoF { "new message content: \n$content\n" }
                             }
@@ -361,6 +555,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                     val reactors = message.getReactors(reactionEmoji)
                                     reactors.map { it.asMemberOrNull(guild.id) }
                                         .filterNotNull()
+                                        .filter { it.id != kord.selfId }
                                         .filter { member ->
                                             role.id !in member.roleIds
                                         }.collect { member ->
@@ -434,7 +629,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 guild,
                 newRoleChooserConfig,
                 newRoleMapping,
-                flags,
+                message.flags,
             )
         }
         newRoleMapping.forEach { entry ->
@@ -449,7 +644,7 @@ class RoleManagementExtension : Extension(), Klogging {
             newRoleMapping
         )
 
-        return "added new role mapping ${arguments.reaction.mention} -> ${arguments.role.mention} to ${arguments.section} in ${channel.mention}"
+        return "added new role mapping ${arguments.reaction.mention} -> ${arguments.role.mention} to `${arguments.section}` in ${channel.mention}"
     }
 
     private suspend fun list(
@@ -519,15 +714,17 @@ class RoleManagementExtension : Extension(), Klogging {
 
         val message = getOrCreateMessage(key, roleChooserConfig, guild)
 
-        configUnit.save(
+        val newConfig = configUnit.save(
             configUnit.get()?.deleteRoleMapping(key, reactionEmoji) ?: relayError("failed to save config")
         )
+        val (newKey, newRoleChooser) = newConfig.find(arguments.section, channel.id)
+            ?: relayError("no role selection section ${arguments.section}")
         message.edit {
             content = buildMessage(
                 guild,
-                roleChooserConfig,
-                roleChooserConfig.roleMapping,
-                flags,
+                newRoleChooser,
+                newRoleChooser.roleMapping,
+                message.flags,
             )
         }
         message.getReactors(reactionEmoji)
@@ -567,7 +764,7 @@ class RoleManagementExtension : Extension(), Klogging {
         val roleManagementConfig = configUnit.get() ?: RoleManagementConfig()
 
         run {
-            val shouldNotExist = roleManagementConfig.roleChoosers.entries.firstOrNull { (key, entry) ->
+            val shouldNotExist = roleManagementConfig.roleChoosers.entries.firstOrNull { (_, entry) ->
                 entry.section == arguments.newSection && entry.channelId == channel.id
             }
 
@@ -602,7 +799,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 guild,
                 newRoleChooserConfig,
                 newRoleMapping,
-                flags,
+                message.flags,
             )
             logger.infoF { "new message content: \n$content\n" }
         }
@@ -802,6 +999,17 @@ data class RoleManagementConfig(
     }
 }
 
+private suspend fun parseColor(input: String, context: CommandContext): Color? {
+    return when {
+        input.startsWith("#") -> Color(input.substring(1).toInt(16))
+        input.startsWith("0x") -> Color(input.substring(2).toInt(16))
+        input.all { it.isDigit() } -> Color(input.toInt())
+
+        else -> ColorParser.parse(input, context.getLocale()) ?: throw DiscordRelayedException(
+            context.translate("converters.color.error.unknown", replacements = arrayOf(input))
+        )
+    }
+}
 
 private fun List<RoleMappingConfig>.getByEmoji(emoji: ReactionEmoji): Snowflake? =
     firstOrNull { it.reaction == emoji.mention }?.role
