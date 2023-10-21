@@ -52,10 +52,8 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
 import moe.nikky.ConfigurationExtension
-import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.debugF
 import moe.nikky.errorF
-import moe.nikky.getTwitchConfigs
 import moe.nikky.infoF
 import moe.nikky.linesChunkedByMaxLength
 import moe.nikky.location
@@ -162,11 +160,6 @@ class TwitchExtension() : Extension(), Klogging {
                     )
                 ) {
                     val guilds = kord.guilds.toList()
-                    guilds.forEach { guild ->
-                        if(guild.config().get() == null) {
-                            convertConfig(guild)
-                        }
-                    }
 
                     logger.traceF { "checking streams" }
                     val token = httpClient.getToken()
@@ -965,29 +958,6 @@ class TwitchExtension() : Extension(), Klogging {
                 text = streamData.gameName
             }
         }
-    }
-
-    private suspend fun convertConfig(guild: Guild) {
-        val database: DiscordbotDatabase by inject()
-        val configUnit = guild.config()
-
-        val configs = database.getTwitchConfigs(guild)
-            .associate { twitchConfig ->
-                TwitchConfig(
-                    channelId = twitchConfig.channel,
-                    twitchUserName = twitchConfig.twitchUserName,
-                    roleId = twitchConfig.role,
-                    messageId = twitchConfig.message,
-                ).let {
-                    val channel = it.channel(guild)
-                    it.key(channel) to it
-                }
-            }
-        configUnit.save(
-            TwitchGuildConfig(
-                configs = configs
-            )
-        )
     }
 
     private suspend fun checkStreams(guilds: List<Guild>, token: Token) = coroutineScope {

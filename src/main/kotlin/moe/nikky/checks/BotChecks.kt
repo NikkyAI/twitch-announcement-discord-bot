@@ -1,20 +1,13 @@
 package moe.nikky.checks
 
-import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.checks.hasPermission
 import com.kotlindiscord.kord.extensions.checks.types.CheckContext
 import com.kotlindiscord.kord.extensions.utils.getLocale
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.entity.Permission
-import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.klogging.logger
-import moe.nikky.ConfigurationExtension
-import moe.nikky.adminRole
-import moe.nikky.db.DiscordbotDatabase
-import moe.nikky.relayError
-import java.util.*
 
 private val logger = logger("moe.nikky.BotChecks")
 

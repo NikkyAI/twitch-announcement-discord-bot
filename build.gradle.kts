@@ -1,14 +1,10 @@
 @file:Suppress("GradlePackageUpdate")
 
-import de.fayard.refreshVersions.core.versionFor
-
-
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
-    id("app.cash.sqldelight")
     application
 }
 
@@ -25,10 +21,6 @@ repositories {
     maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
         name = "Sonatype Snapshots"
     }
-
-//    maven(url = "https://maven.kotlindiscord.com/repository/maven-public/") {
-//        name = "Kotlin Discord"
-//    }
 }
 
 application {
@@ -45,7 +37,6 @@ kotlin {
 }
 
 dependencies {
-//    implementation("dev.kord:kord-core:_")
     implementation("com.kotlindiscord.kord.extensions:kord-extensions:_")
     implementation("com.kotlindiscord.kord.extensions:annotations:_")
     implementation("com.kotlindiscord.kord.extensions:extra-phishing:_")
@@ -66,15 +57,8 @@ dependencies {
 
     implementation(KotlinX.coroutines.core)
     implementation(KotlinX.coroutines.debug)
-//    implementation(KotlinX.serialization.json)
 
     implementation("br.com.colman:dice-helper:_")
-
-    implementation("app.cash.sqldelight:sqlite-driver:_")
-    implementation("app.cash.sqldelight:primitive-adapters:_")
-    implementation("app.cash.sqldelight:coroutines-extensions:_")
-
-//    implementation(Square.okio)
 
     implementation("io.klogging:klogging-jvm:_")
     implementation("io.klogging:slf4j-klogging:_")
@@ -93,19 +77,6 @@ java {
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions {
         jvmTarget = "16"
-    }
-}
-
-sqldelight {
-    databases {
-        create("DiscordbotDatabase") {
-            packageName.set("moe.nikky.db")
-//            generateAsync.set(true)
-            deriveSchemaFromMigrations.set(true)
-            schemaOutputDirectory.set(file("src/main/sqldelight/databases"))
-            dialect("app.cash.sqldelight:sqlite-3-38-dialect:${versionFor("version.app.cash.sqldelight")}")
-            verifyMigrations.set(true)
-        }
     }
 }
 

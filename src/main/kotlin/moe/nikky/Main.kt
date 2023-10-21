@@ -18,7 +18,6 @@ import io.klogging.logger
 import io.klogging.sending.STDOUT
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.debug.DebugProbes
-import moe.nikky.db.DiscordbotDatabase
 import moe.nikky.twitch.TwitchExtension
 import org.koin.dsl.module
 import java.io.File
@@ -159,7 +158,6 @@ private fun registerKoinModules() {
         listOf(
             module {
                 single<DataAdapter<*>> { Json5DataAdapter() }
-                single { DiscordbotDatabase.load() }
             }
         )
     )

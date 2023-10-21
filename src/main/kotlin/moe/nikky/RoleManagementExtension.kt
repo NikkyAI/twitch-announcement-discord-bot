@@ -69,19 +69,13 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.flow.toSet
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.decodeFromString
 import moe.nikky.converter.reactionEmoji
-import moe.nikky.db.DiscordbotDatabase
 import org.koin.core.component.inject
 import org.koin.dsl.module
 import java.util.*
-import kotlin.time.ExperimentalTime
 
 class RoleManagementExtension : Extension(), Klogging {
     override val name: String = "role-management"
@@ -192,18 +186,6 @@ class RoleManagementExtension : Extension(), Klogging {
             name = "mentionable"
             description = "pingable"
             defaultValue = false
-        }
-    }
-
-
-    inner class CreateEmojiArg : Arguments() {
-        val name by string {
-            name = "name"
-            description = "emoji name"
-        }
-        val color by color {
-            name = "color"
-            description = "emoji color"
         }
     }
 
@@ -478,21 +460,8 @@ class RoleManagementExtension : Extension(), Klogging {
             }
         }
 
-
-        ephemeralSlashCommand(::CreateEmojiArg) {
-            name = "colorEmoji"
-            description = "creates emoji from color"
-
-            action {
-
-            }
-        }
-
         event<GuildCreateEvent> {
             action {
-                if(event.guild.config().get() == null) {
-                    convertConfig(event.guild)
-                }
                 withLogContext(event, event.guild) { guild ->
 //                    val textChannels = guild.channels.filter { it is TextChannel }
 
@@ -883,48 +852,6 @@ class RoleManagementExtension : Extension(), Klogging {
                 event.userAsMember?.removeRole(role)
             }
         }
-    }
-
-    private suspend fun convertConfig(guild: Guild) {
-        val database: DiscordbotDatabase by inject()
-        val roleChoosers = database.roleChooserQueries.getAll(guildId = guild.id).executeAsList()
-
-        val roleManagementConfig = roleChoosers.mapNotNull { roleChooserConfig ->
-            try {
-                logger.infoF { "processing role chooser: $roleChooserConfig" }
-                val roleMapping = database.getRoleMapping(guild, roleChooser = roleChooserConfig)
-
-                val channel = roleChooserConfig.channel(guild)
-
-                val roleMappingConfig = roleMapping.map { (emoji, role) ->
-                    RoleMappingConfig(
-                        reaction = emoji.mention,
-                        role = role.id,
-                        roleName = role.name
-                    )
-                }
-
-                val config = RoleChooserConfig(
-                    section = roleChooserConfig.section,
-//                    description = roleChooserConfig.description,
-                    channelId = channel.id,
-                    messageId = roleChooserConfig.message,
-                    roleMapping = roleMappingConfig
-                )
-
-                config.key(channel) to config
-
-            } catch (e: DiscordRelayedException) {
-                logger.errorF(e) { e.reason }
-                null
-            }
-        }.toMap()
-
-        guild.config().save(
-            RoleManagementConfig(
-                roleChoosers = roleManagementConfig
-            )
-        )
     }
 
     suspend fun loadConfig(guild: GuildBehavior): RoleManagementConfig? {

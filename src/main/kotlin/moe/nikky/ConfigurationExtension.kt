@@ -8,7 +8,6 @@ import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSub
 import com.kotlindiscord.kord.extensions.commands.converters.impl.role
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
-import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.storage.Data
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
@@ -20,16 +19,13 @@ import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Role
 import dev.kord.core.event.Event
-import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.event.interaction.InteractionCreateEvent
 import io.github.xn32.json5k.SerialComment
 import io.klogging.Klogging
 import kotlinx.serialization.Serializable
 import moe.nikky.checks.anyCheck
 import moe.nikky.checks.hasRoleNullable
-import moe.nikky.db.DiscordbotDatabase
 import net.peanuuutz.tomlkt.TomlComment
-import org.koin.core.component.inject
 import org.koin.dsl.module
 import java.util.*
 
@@ -112,14 +108,6 @@ class ConfigurationExtension : Extension(), Klogging {
                 }
             }
         }
-
-        event<GuildCreateEvent> {
-            action {
-                if(event.guild.config().get() == null) {
-                    convertConfig(event.guild)
-                }
-            }
-        }
     }
 
     suspend fun CheckContext<InteractionCreateEvent>.requiresBotControl() {
@@ -149,20 +137,6 @@ class ConfigurationExtension : Extension(), Klogging {
                     ?: "\nand no adminrole is configured")
             )
         }
-    }
-
-    private suspend fun convertConfig(guild: GuildBehavior) {
-        val database: DiscordbotDatabase by inject()
-        val guildConfig = database.guildConfigQueries.get(guild.id).executeAsOne()
-
-        val adminRole = guildConfig.adminRole(guild)
-
-        guild.config().save(
-            GuildConfig(
-                adminRole = adminRole?.id,
-                adminRoleName = adminRole?.name
-            )
-        )
     }
 
     suspend fun loadConfig(guild: GuildBehavior): GuildConfig? {
