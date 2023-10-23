@@ -812,16 +812,26 @@ class RoleManagementExtension : Extension(), Klogging {
             "**${roleChooserConfig.section}** : \n" + roleMapping
                 .map { entry ->
                     val role = guild.getRole(entry.role)
+                    entry to role
+                }
+                .sortedByDescending { (_, role) ->
+                    role.rawPosition
+                }
+                .joinToString("\n") { (entry, role) ->
                     "${entry.reaction} ${role.mention}"
                 }
-                .joinToString("\n")
         } else {
             "**${roleChooserConfig.section}** : \n" + roleMapping
                 .map { entry ->
                     val role = guild.getRole(entry.role)
+                    entry to role
+                }
+                .sortedByDescending { (_, role) ->
+                    role.rawPosition
+                }
+                .joinToString("\n") { (entry, role) ->
                     "${entry.reaction} `${role.name}`"
                 }
-                .joinToString("\n")
         }
     }
 
