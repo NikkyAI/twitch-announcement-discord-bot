@@ -3,18 +3,31 @@ package moe.nikky.twitch
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.*
+import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingBoolean
+import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingInt
+import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
+import com.kotlindiscord.kord.extensions.commands.converters.impl.role
+import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.types.respond
-import com.kotlindiscord.kord.extensions.utils.*
+import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.isPublished
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
 import com.kotlindiscord.kord.extensions.utils.scheduling.Task
 import dev.kord.common.Color
-import dev.kord.common.entity.*
+import dev.kord.common.entity.ChannelType
+import dev.kord.common.entity.GuildScheduledEventEntityMetadata
+import dev.kord.common.entity.GuildScheduledEventPrivacyLevel
+import dev.kord.common.entity.GuildScheduledEventStatus
+import dev.kord.common.entity.Permission
+import dev.kord.common.entity.PresenceStatus
+import dev.kord.common.entity.ScheduledEntityType
+import dev.kord.common.entity.Snowflake
 import dev.kord.common.entity.optional.optional
+import dev.kord.common.exception.RequestException
 import dev.kord.common.toMessageFormat
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
@@ -44,12 +57,19 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.forms.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import moe.nikky.ConfigurationExtension
 import moe.nikky.debugF
@@ -70,6 +90,7 @@ import moe.nikky.warnF
 import moe.nikky.withLogContext
 import org.koin.core.component.inject
 import org.koin.dsl.module
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -336,7 +357,7 @@ class TwitchExtension() : Extension(), Klogging {
                             val jumpUrl = message?.getJumpUrl()
                             val role = entry.role(guild)
 
-                            if(jumpUrl != null) {
+                            if (jumpUrl != null) {
                                 "$jumpUrl ${role.mention} <${entry.twitchUrl}>"
                             } else {
                                 "${channel.mention} ${role.mention} <${entry.twitchUrl}>"
@@ -344,9 +365,9 @@ class TwitchExtension() : Extension(), Klogging {
                         }
 
 
-                        if(messages.isEmpty()) {
+                        if (messages.isEmpty()) {
                             respond {
-                                content =  "no twitch notifications registered, get started with /twitch add "
+                                content = "no twitch notifications registered, get started with /twitch add "
                             }
                             return@withLogContext
                         }
@@ -354,7 +375,7 @@ class TwitchExtension() : Extension(), Klogging {
                         val response =
                             "registered twitch notifications: \n\n${messages.joinToString("\n")}"
 
-                        if(response.length >= 2000) {
+                        if (response.length >= 2000) {
                             respond {
                                 addFile(
                                     "response.txt",
@@ -850,7 +871,8 @@ class TwitchExtension() : Extension(), Klogging {
 
             // check if it was online before
             val updateMessage = if (oldMessage != null && oldMessage.mentionedRoles.toList().isNotEmpty()) {
-                oldMessage.mentionedRoles.toList().also { logger.infoF { "mentions: ${it.map { it.name }}" } }.isNotEmpty()
+                oldMessage.mentionedRoles.toList().also { logger.infoF { "mentions: ${it.map { it.name }}" } }
+                    .isNotEmpty()
                 //oldMessage.content.contains("""<@&\d+>""".toRegex())
             } else {
                 true
@@ -860,7 +882,9 @@ class TwitchExtension() : Extension(), Klogging {
                 val vod = httpClient.getLastVOD(
                     userId = userData.id,
                     token = token,
-                )
+                )?.takeIf {
+                    it.createdAt > (Clock.System.now() - 90.days)
+                }
                 val twitchUrl = "[twitch.tv/${userData.displayName}](https://twitch.tv/${userData.login})"
                 val message = if (vod != null) {
                     """
@@ -971,23 +995,34 @@ class TwitchExtension() : Extension(), Klogging {
 
         logger.traceF { "checking twitch status for ${guilds.map { it.name }}" }
 
-        val channels = mappedTwitchConfigs.keys.flatMap { guild ->
-            val twitchConfig = mappedTwitchConfigs.getValue(guild)
-            twitchConfig.mapNotNull {
-                try {
-                    it.channel(guild)
-                } catch (e: DiscordRelayedException) {
-                    logger.errorF(e) { "failed to resolve channel by id" }
-                    null
-                }
-            }.distinct()
+
+        val channels = try {
+            mappedTwitchConfigs.keys.flatMap { guild ->
+                val twitchConfig = mappedTwitchConfigs.getValue(guild)
+                twitchConfig.mapNotNull {
+                    try {
+                        it.channel(guild)
+                    } catch (e: DiscordRelayedException) {
+                        logger.errorF(e) { "failed to resolve channel by id" }
+                        null
+                    }
+                }.distinct()
+            }
+        } catch (e: CancellationException) {
+            logger.errorF(e) { "cancellation exception while fetching channels" }
+            throw CancellationException("filed fetching channels", e)
         }
 
-        val webhooks = channels.mapNotNull { channel ->
-            withContext(logContext("channel" to channel.asChannel().name)) {
-                getWebhook(channel)
-            }
-        }.associateBy { it.channel.id }
+        val webhooks = try {
+            channels.mapNotNull { channel ->
+                withContext(logContext("channel" to channel.asChannel().name)) {
+                    getWebhook(channel)
+                }
+            }.associateBy { it.channel.id }
+        } catch (e: CancellationException) {
+            logger.errorF(e) { "cancellation exception while fetching webhooks" }
+            throw CancellationException("failed fetching webhooks", e)
+        }
 
         val streamDataMap = httpClient.getStreams(
             userLogins = mappedTwitchConfigs.values.flatMap {
@@ -1010,21 +1045,27 @@ class TwitchExtension() : Extension(), Klogging {
             token = token,
         )
 
-        if (streamDataMap.isNotEmpty()) {
-            val userName = streamDataMap.values.random().userName
-            val message = when (streamDataMap.size) {
-                1 -> userName
-                else -> "$userName and ${streamDataMap.size - 1} More"
+        try {
+            if (streamDataMap.isNotEmpty()) {
+                val userName = streamDataMap.values.random().userName
+                val message = when (streamDataMap.size) {
+                    1 -> userName
+                    else -> "$userName and ${streamDataMap.size - 1} More"
+                }
+                kord.editPresence {
+                    status = PresenceStatus.Online
+                    watching(message)
+                }
+            } else {
+                kord.editPresence {
+                    status = PresenceStatus.Idle
+                    afk = true
+                }
             }
-            kord.editPresence {
-                status = PresenceStatus.Online
-                watching(message)
-            }
-        } else {
-            kord.editPresence {
-                status = PresenceStatus.Idle
-                afk = true
-            }
+        } catch (e: RequestException) {
+            logger.errorF(e) { "failed to update presence" }
+        } catch (e: CancellationException) {
+            logger.errorF(e) { "failed to update presence" }
         }
 
         mappedTwitchConfigPairs.entries.chunked(5).forEach { chunk ->
