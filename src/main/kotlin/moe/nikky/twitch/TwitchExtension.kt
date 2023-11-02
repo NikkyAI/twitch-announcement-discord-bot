@@ -12,7 +12,7 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.types.respond
+import com.kotlindiscord.kord.extensions.time.TimestampType.RelativeTime
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import com.kotlindiscord.kord.extensions.utils.isPublished
 import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
@@ -887,16 +887,19 @@ class TwitchExtension() : Extension(), Klogging {
                 }
                 val twitchUrl = "[twitch.tv/${userData.displayName}](https://twitch.tv/${userData.login})"
                 val message = if (vod != null) {
+                    val timestamp = RelativeTime.format(vod.createdAt.epochSeconds)
+                    val cleanedVodTitle = vod.title
+                        .replace("\\|\\|+".toRegex(), "|")
+                    val vodUrl = "[${cleanedVodTitle}](${vod.url})"
                     """
-                        $twitchUrl
-                        > last VOD: [${vod.title}](${vod.url})
-                        > **${channelInfo.gameName}**
+                        $twitchUrl streamed **${channelInfo.gameName}**
+                        > $vodUrl
+                        $timestamp for `${vod.duration}`
                         """.trimIndent()
                 } else {
                     """
-                        $twitchUrl
+                        $twitchUrl streamed **${channelInfo.gameName}**
                         > ${channelInfo.title}
-                        > **${channelInfo.gameName}**
                     """.trimIndent()
                 }
                 val messageId = oldMessage?.let {

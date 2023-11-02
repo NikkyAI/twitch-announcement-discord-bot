@@ -23,6 +23,8 @@ import moe.nikky.debugF
 import moe.nikky.errorF
 import moe.nikky.infoF
 import moe.nikky.traceF
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -400,8 +402,24 @@ data class TwitchVideoData(
     val viewCount: UInt,
     val language: String,
     val type: String,
-    val duration: String,
-)
+    @SerialName("duration")
+    val durationString: String,
+) {
+    val duration: Duration get() {
+        var input = durationString
+        val hours = input
+            .substringBefore('h')
+            .toIntOrNull() ?: 0
+        input = input.substringAfter('h')
+        val minutes = input
+            .substringBefore('m')
+            .toIntOrNull() ?: 0
+        val seconds = input
+            .substringBefore('s')
+            .toIntOrNull() ?: 0
+        return hours.hours + minutes.minutes + seconds.seconds
+    }
+}
 
 @Serializable
 data class TwitchGameData(
