@@ -21,11 +21,9 @@ import com.kotlindiscord.kord.extensions.parsers.ColorParser
 import com.kotlindiscord.kord.extensions.storage.Data
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.any
 import com.kotlindiscord.kord.extensions.utils.botHasPermissions
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
-import com.kotlindiscord.kord.extensions.utils.permissionsForMember
 import com.kotlindiscord.kord.extensions.utils.translate
 import dev.kord.common.Color
 import dev.kord.common.annotation.KordPreview
@@ -33,7 +31,6 @@ import dev.kord.common.asJavaLocale
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.MessageFlag
 import dev.kord.common.entity.MessageFlags
-import dev.kord.common.entity.OverwriteType
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior

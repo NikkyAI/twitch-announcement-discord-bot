@@ -9,7 +9,6 @@ import com.kotlindiscord.kord.extensions.extensions.ephemeralUserCommand
 import com.kotlindiscord.kord.extensions.storage.Data
 import com.kotlindiscord.kord.extensions.storage.StorageType
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.suggestStringMap
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
