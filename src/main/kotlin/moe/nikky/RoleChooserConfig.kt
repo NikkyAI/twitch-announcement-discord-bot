@@ -72,26 +72,26 @@ data class RoleMappingConfig(
     val roleName: String,
 ) : Data {
     suspend fun reactionEmoji(guildBehavior: GuildBehavior): ReactionEmoji {
-        if(emoji.startsWith('<') && emoji.contains(":") && emoji.endsWith(">")) {
+        val guildEmoji = if(emoji.startsWith('<') && emoji.contains(":") && emoji.endsWith(">")) {
             val id = emoji.substringAfterLast(":").substringBefore(">")
-            return guildBehavior.emojis.first { it.id.toString() == id }
-                .let {
-//                    logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
-                    ReactionEmoji.from(it)
-                }
+            guildBehavior.emojis.firstOrNull() { it.id.toString() == id } ?: run {
+                val name = emoji.substringAfter(":").substringBefore("")
+                guildBehavior.emojis.firstOrNull { it.name == name }
+            }
+        } else {
+            guildBehavior.emojis.firstOrNull { it.name == emoji || it.id.toString() == emoji }
+        } ?: run {
+            if (emoji != emojiName) {
+                guildBehavior.emojis.firstOrNull { it.name == emojiName }
+            } else {
+                null
+            }
         }
-
-        val guildEmoji = guildBehavior.emojis.firstOrNull { it.name == emoji || it.id.toString() == emoji }
 
         return guildEmoji
             ?.let {
-//                logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
                 ReactionEmoji.from(it)
-            }
-            ?: run {
-//                logger.traceF { "creating unicode emoji from '$emoji'" }
-                ReactionEmoji.Unicode(emoji)
-            }
+            } ?: ReactionEmoji.Unicode(emoji)
     }
     suspend fun getRole(guildBehavior: GuildBehavior): Role {
         return guildBehavior.getRole(role)
