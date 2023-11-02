@@ -166,7 +166,7 @@ class BotInfoExtension : Extension(), Klogging {
                                     it.role
                                 }.count()
                                 val distinctEmoji = roleMappings.distinctBy() {
-                                    it.reaction
+                                    it.emoji
                                 }.count()
                                 val guilds = roleManagementConfigs.size
 

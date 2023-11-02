@@ -14,6 +14,7 @@ import dev.kord.rest.request.KtorRequestException
 import io.github.xn32.json5k.SerialComment
 import io.klogging.context.logContext
 import io.klogging.logger
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -65,22 +66,53 @@ data class RoleChooserConfig(
 
 @Serializable
 data class RoleMappingConfig(
-    val reaction: String,
+    val emoji: String,
+    val emojiName: String? = null,
     val role: Snowflake,
     val roleName: String,
 ) : Data {
     suspend fun reactionEmoji(guildBehavior: GuildBehavior): ReactionEmoji {
-        return guildBehavior.emojis.firstOrNull { it.mention == reaction }
+        if(emoji.startsWith("<") && emoji.endsWith(">")) {
+            val id = emoji.substringAfterLast(":").substringBefore("<")
+            return guildBehavior.emojis.first { it.id.toString() == id }
+                .let {
+                    logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
+                    ReactionEmoji.from(it)
+                }
+        }
+
+        val guildEmoji = guildBehavior.emojis.firstOrNull { it.name == emoji || it.id.toString() == emoji }
+
+        return guildEmoji
             ?.let {
                 logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
                 ReactionEmoji.from(it)
             }
             ?: run {
-                logger.traceF { "creating unicode emoji from '$reaction'" }
-                ReactionEmoji.Unicode(reaction)
+                logger.traceF { "creating unicode emoji from '$emoji'" }
+                ReactionEmoji.Unicode(emoji)
             }
     }
     suspend fun getRole(guildBehavior: GuildBehavior): Role {
         return guildBehavior.getRole(role)
     }
 }
+
+
+@Serializable
+data class RoleChooserConfigOld(
+    val section: String,
+    @SerialComment("channel")
+    val channelId: Snowflake,
+    @SerialComment("message")
+    val messageId: Snowflake,
+    val roleMapping: List<RoleMappingConfigOld>,
+) : Data
+
+
+@Serializable
+data class RoleMappingConfigOld(
+    val reaction: String,
+    val role: Snowflake,
+    val roleName: String,
+) : Data

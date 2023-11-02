@@ -72,6 +72,7 @@ import kotlinx.serialization.builtins.serializer
 import moe.nikky.converter.reactionEmoji
 import org.koin.core.component.inject
 import org.koin.dsl.module
+import java.lang.Exception
 import java.util.*
 
 class RoleManagementExtension : Extension(), Klogging {
@@ -460,6 +461,8 @@ class RoleManagementExtension : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
+                    migrateConfig(guild)
+
 //                    val textChannels = guild.channels.filter { it is TextChannel }
 
                     val config = guild.config().get() ?: return@withLogContext
@@ -559,11 +562,6 @@ class RoleManagementExtension : Extension(), Klogging {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
-
-//        val reaction = arguments.reaction
-//        if(reaction is ReactionEmoji.Custom && reaction.isAnimated) {
-//            relayError("animated emojis are not supported")
-//        }
 
         val configUnit = guild.config()
         val (key, roleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
@@ -822,9 +820,11 @@ class RoleManagementExtension : Extension(), Klogging {
                 .sortedByDescending { (_, role) ->
                     role.rawPosition
                 }
-                .joinToString("\n") { (entry, role) ->
-                    "${entry.reaction} ${role.mention}"
+                .map {(entry, role) ->
+                    val emoji = entry.reactionEmoji(guild)
+                    "${emoji.mention} ${role.mention}"
                 }
+                .joinToString("\n")
         } else {
             "**${roleChooserConfig.section}** : \n" + roleMapping
                 .map { entry ->
@@ -834,9 +834,11 @@ class RoleManagementExtension : Extension(), Klogging {
                 .sortedByDescending { (_, role) ->
                     role.rawPosition
                 }
-                .joinToString("\n") { (entry, role) ->
-                    "${entry.reaction} `${role.name}`"
+                .map {(entry, role) ->
+                    val emoji = entry.reactionEmoji(guild)
+                    "${emoji.mention} `${role.name}`"
                 }
+                .joinToString("\n")
         }
     }
 
@@ -872,10 +874,95 @@ class RoleManagementExtension : Extension(), Klogging {
     suspend fun loadConfig(guild: GuildBehavior): RoleManagementConfig? {
         return guild.config().get()
     }
+
+    suspend fun migrateConfig(guild: GuildBehavior) {
+        try {
+            val oldConfig = StorageUnit(
+                storageType = StorageType.Config,
+                namespace = name,
+                identifier = "role-management",
+                dataType = RoleManagementConfigOld::class
+            ).withGuild(guild).get() ?: return
+
+            val newData = RoleManagementConfig(
+                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
+                    RoleChooserConfig(
+                        section = roleChooserConfig.section,
+                        channelId = roleChooserConfig.channelId,
+                        messageId = roleChooserConfig.messageId,
+                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
+                            val emoji =
+                                guild.emojis.firstOrNull { it.mention == mapping.reaction }
+                            if(emoji != null) {
+                                RoleMappingConfig(
+                                    emoji = emoji.id.toString(),
+                                    emojiName = emoji.name,
+                                    role = mapping.role,
+                                    roleName = mapping.roleName
+                                )
+                            } else {
+                                RoleMappingConfig(
+                                    emoji = mapping.reaction,
+                                    emojiName = mapping.reaction,
+                                    role = mapping.role,
+                                    roleName = mapping.roleName
+                                )
+                            }
+                        }
+                    )
+                }
+            )
+            guild.config().save(newData)
+            return
+        } catch (e: Exception) {
+
+        }
+
+        try {
+            val oldConfig = StorageUnit(
+                storageType = StorageType.Config,
+                namespace = name,
+                identifier = "role-management",
+                dataType = RoleManagementConfig::class
+            ).withGuild(guild).get() ?: return
+
+            val newData = RoleManagementConfig(
+                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
+                    roleChooserConfig.copy(
+                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
+                            val emoji = guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
+                            if(emoji != null) {
+                                mapping.copy(
+                                    emojiName = emoji.name,
+                                    emoji = emoji.id.toString(),
+                                )
+                            } else {
+                                mapping.copy(
+                                    emojiName = mapping.emoji
+                                )
+                            }
+                        }
+                    )
+                }
+            )
+            guild.config().save(newData)
+            return
+        } catch (e: Exception) {
+
+        }
+
+    }
 }
 
 @Serializable
-//@Suppress("DataClassShouldBeImmutable", "MagicNumber")
+data class RoleManagementConfigOld(
+    val roleChoosers: Map<String, RoleChooserConfigOld> = emptyMap(),
+) : Data
+{
+
+}
+
+@Serializable
 data class RoleManagementConfig(
     val roleChoosers: Map<String, RoleChooserConfig> = emptyMap(),
 ) : Data {
@@ -919,7 +1006,7 @@ data class RoleManagementConfig(
         }
 
         val newValue = oldRoleChooser.copy(
-            roleMapping = oldRoleChooser.roleMapping.filter { it.reaction != emoji.mention }
+            roleMapping = oldRoleChooser.roleMapping.filter { it.emoji != emoji.name }
         )
 
         return copy(roleChoosers = roleChoosers + (key to newValue))
@@ -930,7 +1017,7 @@ data class RoleManagementConfig(
         }
 
         val newValue = oldRoleChooser.copy(
-            roleMapping = oldRoleChooser.roleMapping + RoleMappingConfig(emoji.mention, role.id, role.name)
+            roleMapping = oldRoleChooser.roleMapping + RoleMappingConfig(emoji.idOrUnicode(), emoji.name, role.id, role.name)
         )
 
         return copy(roleChoosers = roleChoosers + (key to newValue))
@@ -953,8 +1040,16 @@ private suspend fun parseColor(input: String, context: CommandContext): Color? {
     }
 }
 
+private fun ReactionEmoji.idOrUnicode(): String {
+    return when(this) {
+        is ReactionEmoji.Custom -> id.toString()
+        is ReactionEmoji.Unicode -> name
+    }
+}
+
+
 private fun List<RoleMappingConfig>.getByEmoji(emoji: ReactionEmoji): Snowflake? =
-    firstOrNull { it.reaction == emoji.mention }?.role
+    firstOrNull { it.emoji == emoji.idOrUnicode() }?.role
 
 private fun List<Pair<ReactionEmoji, Role>>.getByEmoji(emoji: ReactionEmoji): Role? =
     firstOrNull { it.first == emoji }?.second
