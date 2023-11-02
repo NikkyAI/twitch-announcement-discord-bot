@@ -515,8 +515,9 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
                             try {
                                 roleMapping.forEach { entry ->
-                                    val reactionEmoji = entry.reactionEmoji(guild)
+                                    val reactionEmoji: ReactionEmoji = entry.reactionEmoji(guild)
                                     val role = entry.getRole(guild)
+                                    logger.traceF { "adding reaction $reactionEmoji for role ${role.name}" }
                                     message.addReaction(reactionEmoji)
                                     val reactors = message.getReactors(reactionEmoji)
                                     reactors.map { it.asMemberOrNull(guild.id) }
@@ -555,6 +556,11 @@ class RoleManagementExtension : Extension(), Klogging {
     ): String {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
+        }
+
+        val reaction = arguments.reaction
+        if(reaction is ReactionEmoji.Custom && reaction.isAnimated) {
+            relayError("animated emojis are not supported")
         }
 
         val configUnit = guild.config()
