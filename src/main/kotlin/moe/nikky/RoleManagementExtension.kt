@@ -63,6 +63,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
@@ -930,7 +931,13 @@ class RoleManagementExtension : Extension(), Klogging {
                 roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
                     roleChooserConfig.copy(
                         roleMapping = roleChooserConfig.roleMapping.map { mapping ->
-                            val emoji = guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
+
+                            val emoji = if(mapping.emoji.startsWith("<") && mapping.emoji.endsWith(">")) {
+                                val id = mapping.emoji.substringAfterLast(":").substringBefore(">")
+                                guild.emojis.firstOrNull { it.id.toString() == id }
+                            } else {
+                                guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
+                            }
                             if(emoji != null) {
                                 mapping.copy(
                                     emojiName = emoji.name,

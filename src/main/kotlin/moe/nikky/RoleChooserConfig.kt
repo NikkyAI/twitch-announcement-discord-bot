@@ -72,8 +72,8 @@ data class RoleMappingConfig(
     val roleName: String,
 ) : Data {
     suspend fun reactionEmoji(guildBehavior: GuildBehavior): ReactionEmoji {
-        if(emoji.startsWith("<") && emoji.endsWith(">")) {
-            val id = emoji.substringAfterLast(":").substringBefore("<")
+        if(emoji.startsWith('<') && emoji.contains(":") && emoji.endsWith(">")) {
+            val id = emoji.substringAfterLast(":").substringBefore(">")
             return guildBehavior.emojis.first { it.id.toString() == id }
                 .let {
                     logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
