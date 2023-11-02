@@ -71,8 +71,14 @@ data class RoleMappingConfig(
 ) : Data {
     suspend fun reactionEmoji(guildBehavior: GuildBehavior): ReactionEmoji {
         return guildBehavior.emojis.firstOrNull { it.mention == reaction }
-            ?.let { ReactionEmoji.from(it) }
-            ?: ReactionEmoji.Unicode(reaction)
+            ?.let {
+                logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
+                ReactionEmoji.from(it)
+            }
+            ?: run {
+                logger.traceF { "creating unicode emoji from '$reaction'" }
+                ReactionEmoji.Unicode(reaction)
+            }
     }
     suspend fun getRole(guildBehavior: GuildBehavior): Role {
         return guildBehavior.getRole(role)

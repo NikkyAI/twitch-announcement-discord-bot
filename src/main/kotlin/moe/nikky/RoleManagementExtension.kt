@@ -515,7 +515,9 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
                             try {
                                 roleMapping.forEach { entry ->
+                                    logger.traceF { "parse emoji" }
                                     val reactionEmoji: ReactionEmoji = entry.reactionEmoji(guild)
+                                    logger.traceF { "get role ${entry.role}" }
                                     val role = entry.getRole(guild)
                                     logger.traceF { "adding reaction $reactionEmoji for role ${role.name}" }
                                     message.addReaction(reactionEmoji)
@@ -526,7 +528,7 @@ class RoleManagementExtension : Extension(), Klogging {
                                         .filter { member ->
                                             role.id !in member.roleIds
                                         }.collect { member ->
-                                            logger.info { "adding '${role.name}' to '${member.effectiveName}'" }
+                                            logger.infoF { "adding '${role.name}' to '${member.effectiveName}'" }
                                             member.addRole(role.id)
                                         }
                                 }
@@ -558,10 +560,10 @@ class RoleManagementExtension : Extension(), Klogging {
             channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
         }
 
-        val reaction = arguments.reaction
-        if(reaction is ReactionEmoji.Custom && reaction.isAnimated) {
-            relayError("animated emojis are not supported")
-        }
+//        val reaction = arguments.reaction
+//        if(reaction is ReactionEmoji.Custom && reaction.isAnimated) {
+//            relayError("animated emojis are not supported")
+//        }
 
         val configUnit = guild.config()
         val (key, roleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
