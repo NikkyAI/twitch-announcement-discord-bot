@@ -519,9 +519,7 @@ class RoleManagementExtension : Extension(), Klogging {
                             }
                             try {
                                 roleMapping.forEach { entry ->
-                                    logger.traceF { "parse emoji" }
                                     val reactionEmoji: ReactionEmoji = entry.reactionEmoji(guild)
-                                    logger.traceF { "get role ${entry.role}" }
                                     val role = entry.getRole(guild)
                                     logger.traceF { "adding reaction $reactionEmoji for role ${role.name}" }
                                     message.addReaction(reactionEmoji)
@@ -877,96 +875,46 @@ class RoleManagementExtension : Extension(), Klogging {
     }
 
     suspend fun migrateConfig(guild: GuildBehavior) {
-        try {
-            val oldConfig = StorageUnit(
-                storageType = StorageType.Config,
-                namespace = name,
-                identifier = "role-management",
-                dataType = RoleManagementConfigOld::class
-            ).withGuild(guild).get() ?: return
-
-            val newData = RoleManagementConfig(
-                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
-                    RoleChooserConfig(
-                        section = roleChooserConfig.section,
-                        channelId = roleChooserConfig.channelId,
-                        messageId = roleChooserConfig.messageId,
-                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
-                            val emoji =
-                                guild.emojis.firstOrNull { it.mention == mapping.reaction }
-                            if(emoji != null) {
-                                RoleMappingConfig(
-                                    emoji = emoji.id.toString(),
-                                    emojiName = emoji.name,
-                                    role = mapping.role,
-                                    roleName = mapping.roleName
-                                )
-                            } else {
-                                RoleMappingConfig(
-                                    emoji = mapping.reaction,
-                                    emojiName = mapping.reaction,
-                                    role = mapping.role,
-                                    roleName = mapping.roleName
-                                )
-                            }
-                        }
-                    )
-                }
-            )
-            guild.config().save(newData)
-            return
-        } catch (e: Exception) {
-
-        }
-
-        try {
-            val oldConfig = StorageUnit(
-                storageType = StorageType.Config,
-                namespace = name,
-                identifier = "role-management",
-                dataType = RoleManagementConfig::class
-            ).withGuild(guild).get() ?: return
-
-            val newData = RoleManagementConfig(
-                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
-                    roleChooserConfig.copy(
-                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
-
-                            val emoji = if(mapping.emoji.startsWith("<") && mapping.emoji.endsWith(">")) {
-                                val id = mapping.emoji.substringAfterLast(":").substringBefore(">")
-                                guild.emojis.firstOrNull { it.id.toString() == id }
-                            } else {
-                                guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
-                            }
-                            if(emoji != null) {
-                                mapping.copy(
-                                    emojiName = emoji.name,
-                                    emoji = emoji.id.toString(),
-                                )
-                            } else {
-                                mapping.copy(
-                                    emojiName = mapping.emoji
-                                )
-                            }
-                        }
-                    )
-                }
-            )
-            guild.config().save(newData)
-            return
-        } catch (e: Exception) {
-
-        }
+//        try {
+//            val oldConfig = StorageUnit(
+//                storageType = StorageType.Config,
+//                namespace = name,
+//                identifier = "role-management",
+//                dataType = RoleManagementConfig::class
+//            ).withGuild(guild).get() ?: return
+//
+//            val newData = RoleManagementConfig(
+//                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
+//                    roleChooserConfig.copy(
+//                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
+//
+//                            val emoji = if(mapping.emoji.startsWith("<") && mapping.emoji.endsWith(">")) {
+//                                val id = mapping.emoji.substringAfterLast(":").substringBefore(">")
+//                                guild.emojis.firstOrNull { it.id.toString() == id }
+//                            } else {
+//                                guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
+//                            }
+//                            if(emoji != null) {
+//                                mapping.copy(
+//                                    emojiName = emoji.name,
+//                                    emoji = emoji.id.toString(),
+//                                )
+//                            } else {
+//                                mapping.copy(
+//                                    emojiName = mapping.emoji
+//                                )
+//                            }
+//                        }
+//                    )
+//                }
+//            )
+//            guild.config().save(newData)
+//            return
+//        } catch (e: Exception) {
+//
+//        }
 
     }
-}
-
-@Serializable
-data class RoleManagementConfigOld(
-    val roleChoosers: Map<String, RoleChooserConfigOld> = emptyMap(),
-) : Data
-{
-
 }
 
 @Serializable

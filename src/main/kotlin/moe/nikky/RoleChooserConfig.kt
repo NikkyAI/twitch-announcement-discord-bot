@@ -76,7 +76,7 @@ data class RoleMappingConfig(
             val id = emoji.substringAfterLast(":").substringBefore(">")
             return guildBehavior.emojis.first { it.id.toString() == id }
                 .let {
-                    logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
+//                    logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
                     ReactionEmoji.from(it)
                 }
         }
@@ -85,11 +85,11 @@ data class RoleMappingConfig(
 
         return guildEmoji
             ?.let {
-                logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
+//                logger.traceF { "found emoji ${it.name}, turning into reaction emoji" }
                 ReactionEmoji.from(it)
             }
             ?: run {
-                logger.traceF { "creating unicode emoji from '$emoji'" }
+//                logger.traceF { "creating unicode emoji from '$emoji'" }
                 ReactionEmoji.Unicode(emoji)
             }
     }
@@ -97,22 +97,3 @@ data class RoleMappingConfig(
         return guildBehavior.getRole(role)
     }
 }
-
-
-@Serializable
-data class RoleChooserConfigOld(
-    val section: String,
-    @SerialComment("channel")
-    val channelId: Snowflake,
-    @SerialComment("message")
-    val messageId: Snowflake,
-    val roleMapping: List<RoleMappingConfigOld>,
-) : Data
-
-
-@Serializable
-data class RoleMappingConfigOld(
-    val reaction: String,
-    val role: Snowflake,
-    val roleName: String,
-) : Data
