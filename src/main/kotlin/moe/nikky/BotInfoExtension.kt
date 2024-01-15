@@ -9,7 +9,7 @@ import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
-import dev.kord.rest.builder.message.create.embed
+import dev.kord.rest.builder.message.embed
 import io.klogging.Klogging
 import io.ktor.http.*
 import kotlinx.coroutines.flow.count

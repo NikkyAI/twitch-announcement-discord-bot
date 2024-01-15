@@ -4,6 +4,7 @@ out/
 build/
 
 /data/
+/config/
 /logs/
 /run
 /colors

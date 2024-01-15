@@ -1,6 +1,7 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.commands.Arguments
+import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.commands.converters.impl.user
 import com.kotlindiscord.kord.extensions.extensions.Extension
@@ -12,18 +13,19 @@ import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.utils.suggestStringMap
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
-import dev.kord.core.entity.Guild
 import dev.kord.core.entity.User
-import dev.kord.rest.builder.message.create.embed
+import dev.kord.rest.builder.message.embed
 import io.klogging.Klogging
+import io.ktor.client.request.forms.*
+import io.ktor.utils.io.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.IllegalTimeZoneException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetAt
-import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.ZERO
 import kotlin.time.Duration.Companion.seconds
 
@@ -48,9 +50,9 @@ class LocalTimeExtension : Extension(), Klogging {
             "UTC", "GMT", "Europe/London",
             "CET", "Europe/Berlin", "Europe/Paris",
             "NZ", "Japan", "Asia/Tokyo",
-            "Asia/Manila", "Asia/Kolkata", "Asia/Jakarta",
-            "US/Eastern", "US/Central", "America/New_York",
-            "US/Pacific", "America/Sao_Paulo", "America/Chicago",
+            "US/Alaska", "US/Pacific", "US/Mountain",
+            "US/Central", "US/Eastern", "Canada/Eastern",
+            "America/New_York", "America/Sao_Paulo", "America/Chicago",
             "America/Los_Angeles", "Europe/Moscow", "Singapore",
         )
     }
@@ -61,45 +63,80 @@ class LocalTimeExtension : Extension(), Klogging {
             name = "timezone"
             description = "list or set timezones"
 
-            action {
-                withLogContext(event, guild) { guild ->
-                    logger.infoF { "received timezone id: ${arguments.timezoneId}" }
-                    val timezone = try {
-                        TimeZone.of(arguments.timezoneId)
-                    } catch (e: IllegalTimeZoneException) {
-                        respond {
-                            content = "Possibly you meant one of the following timezones?"
-                            embed {
-                                SUGGEST_TIMEZONES.mapNotNull { zoneId ->
-                                    try {
-                                        TimeZone.of(zoneId)
-                                    } catch (e: IllegalTimeZoneException) {
-                                        logger.errorF { "incorrect timezone id: '$zoneId'" }
-                                        null
-                                    }
-                                }.forEach { timezone ->
-                                    field {
-                                        val formattedTime = formatTime(Clock.System.now(), timezone)
-                                        name = timezone.id
-                                        value = "\uD83D\uDD57 `$formattedTime`"
-                                        inline = true
+            ephemeralSubCommand(::TimezoneArgs) {
+                name = "set"
+                description = "update your timezone"
+
+                action {
+                    withLogContext(event, guild) { guild ->
+                        logger.infoF { "received timezone id: ${arguments.timezoneId}" }
+                        val timezone = try {
+                            TimeZone.of(arguments.timezoneId)
+                        } catch (e: IllegalTimeZoneException) {
+                            respond {
+                                content =
+                                    """Possibly you meant one of the following timezones?
+                                        |for a full list of availabe zone ids run 
+                                        |```
+                                        |/timezone list
+                                        |```
+                                        |""".trimMargin()
+                                embed {
+                                    SUGGEST_TIMEZONES.mapNotNull { zoneId ->
+                                        try {
+                                            TimeZone.of(zoneId)
+                                        } catch (e: IllegalTimeZoneException) {
+                                            logger.errorF { "incorrect timezone id: '$zoneId'" }
+                                            null
+                                        }
+                                    }.forEach { timezone ->
+                                        field {
+                                            val formattedTime = formatTime(Clock.System.now(), timezone)
+                                            name = timezone.id
+                                            value = "\uD83D\uDD57 `$formattedTime`"
+                                            inline = true
+                                        }
                                     }
                                 }
                             }
+                            return@withLogContext
                         }
-                        return@withLogContext
+
+                        val configStorage = guild.config(event.interaction.user.id)
+                        configStorage.save(
+                            TimezoneConfig(timezoneId = timezone.id)
+                        )
+
+                        respond {
+                            val formattedTime = formatTime(Clock.System.now(), timezone)
+
+                            content =
+                                "Timezone has been set to **${timezone.id}**. Your current time should be `$formattedTime`"
+                        }
                     }
+                }
+            }
 
-                    val configStorage = guild.config(event.interaction.user.id)
-                    configStorage.save(
-                        TimezoneConfig(timezoneId = timezone.id)
-                    )
+            ephemeralSubCommand() {
+                name = "list"
+                description = "sends a list of valid timezones"
 
-                    respond {
-                        val formattedTime = formatTime(Clock.System.now(), timezone)
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val timezones = TimeZone.sortedList().map { (tz, offset) ->
+                            "${offset.toString().padEnd(10, ' ')} ${tz.id}"
+                        }
 
-                        content =
-                            "Timezone has been set to **${timezone.id}**. Your current time should be `$formattedTime`"
+                        respond {
+                            content = "a list of valid timezone ids is in the attachment"
+
+                            addFile(
+                                "timezones.txt",
+                                ChannelProvider {
+                                    ByteReadChannel(timezones.joinToString("\n"))
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -150,7 +187,7 @@ class LocalTimeExtension : Extension(), Klogging {
         targetUser: User,
         selfUser: User,
     ): String {
-        val targetConfig =  guild.config(targetUser.id).get()
+        val targetConfig = guild.config(targetUser.id).get()
         val selfConfig = guild.config(selfUser.id).get()
 
         if (targetConfig == null) {
@@ -208,6 +245,7 @@ class LocalTimeExtension : Extension(), Klogging {
             }
         }
     }
+
     inner class TimezoneTargetArgs : Arguments() {
         val user by user {
             name = "user"
@@ -222,4 +260,25 @@ data class TimezoneConfig(
     val timezoneId: String,
 ) : Data {
     val timezone: TimeZone by lazy { TimeZone.of(timezoneId) }
+}
+
+fun TimeZone.Companion.sortedList(): List<Pair<TimeZone, Duration>> {
+    val now = Clock.System.now()
+    return TimeZone.availableZoneIds
+        .map { zoneId ->
+            TimeZone.of(zoneId)
+        }
+        .sortedBy { tz ->
+            tz.offsetAt(now).totalSeconds
+        }.map { tz ->
+            val offset = tz.offsetAt(now)
+            val hoursOffset = -offset.totalSeconds.seconds
+            tz to hoursOffset
+        }
+}
+
+fun main() {
+    TimeZone.sortedList().forEach { (tz, offset) ->
+        println("${offset.toString().padEnd(10, ' ')} ${tz.id}")
+    }
 }
