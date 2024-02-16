@@ -46,6 +46,7 @@ import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
+import dev.kord.rest.builder.message.embed
 import dev.kord.rest.builder.message.modify.embed
 import dev.kord.rest.request.KtorRequestException
 import dev.kord.rest.request.RestRequestException
@@ -68,6 +69,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
@@ -166,7 +168,7 @@ class TwitchExtension() : Extension(), Klogging {
     }
 
     private val scheduler = Scheduler()
-    private val task: Task =
+    private val task: Task = runBlocking {
         scheduler.schedule(
             delay = 15.seconds,
             startNow = true,
@@ -184,15 +186,10 @@ class TwitchExtension() : Extension(), Klogging {
 
                     logger.traceF { "checking streams" }
                     val token = httpClient.getToken()
-                    if (token != null) {
-                        checkStreams(
-                            guilds = guilds,
-                            token = token
-                        )
-                    } else {
-                        logger.errorF { "failed to acquire token" }
-                        delay(5.seconds)
-                    }
+                    checkStreams(
+                        guilds = guilds,
+                        token = token
+                    )
                 }
             } catch (e: Exception) {
                 logger.errorF(e) { "failed in twitch loop" }
@@ -200,6 +197,7 @@ class TwitchExtension() : Extension(), Klogging {
                 delay(15.seconds)
             }
         }
+    }
 
     inner class TwitchAddArgs : Arguments() {
         val role by role {
@@ -439,7 +437,7 @@ class TwitchExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val token = httpClient.getToken()
                         val userData = httpClient.getUsers(
                             logins = listOf(arguments.twitchUserName),
                             token = token,
@@ -576,7 +574,7 @@ class TwitchExtension() : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val token = httpClient.getToken()
                         val userData = httpClient.getUsers(
                             logins = listOf(arguments.twitchUserName),
                             token = token,
@@ -615,7 +613,7 @@ class TwitchExtension() : Extension(), Klogging {
                 )
                 action {
                     withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+                        val token = httpClient.getToken()
                         val userData = httpClient.getUsers(
                             logins = listOf(arguments.twitchUserName),
                             token = token,
@@ -671,7 +669,7 @@ class TwitchExtension() : Extension(), Klogging {
             ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
 
         val user = try {
-            val token = httpClient.getToken() ?: relayError("cannot get twitch token")
+            val token = httpClient.getToken()
             val userData = httpClient.getUsers(
                 token = token,
                 logins = listOf(arguments.twitchUserName)

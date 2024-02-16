@@ -96,10 +96,10 @@ suspend fun main() {
 }
 
 suspend fun setupLogging() {
-    val latestFile = logFile(File("logs/latest.log"))
-    val latestTrace = logFile(File("logs/latest-trace.log"))
+    val latestFile = LogFile(File("logs/latest.log"))
+    val latestTrace = LogFile(File("logs/latest-trace.log"))
     val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(Date())
-    val timestamped = logFile(File("logs/log-$timestamp.log"))
+    val timestamped = LogFile(File("logs/log-$timestamp.log"))
     loggingConfiguration {
         if (dockerLogging) {
             sink("stdout", DOCKER_RENDERER, STDOUT)

@@ -22,35 +22,42 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
-val DOCKER_RENDERER: RenderString = { e: LogEvent ->
-    val loggerOrFile = e.items["file"] ?: e.logger
-    val message = "${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
-    val cleanedItems = e.items - "file"
-    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-    message + maybeItems + maybeStackTrace
+val DOCKER_RENDERER: RenderString = object: RenderString {
+    override fun invoke(e: LogEvent): String {
+        val loggerOrFile = e.items["file"] ?: e.logger
+        val message = "${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
+        val cleanedItems = e.items - "file"
+        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+        return message + maybeItems + maybeStackTrace
+    }
 }
 
-val CUSTOM_RENDERER: RenderString = { e: LogEvent ->
-    val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-    val time = e.timestamp.localString.substring(0..22)
-    val message = "$time ${e.level} $loggerOrFile : ${e.evalTemplate()}"
-    val cleanedItems = e.items - "file"
-    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-    message + maybeItems + maybeStackTrace
+val CUSTOM_RENDERER: RenderString = object: RenderString {
+    override fun invoke(e: LogEvent): String {
+        val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
+        val time = e.timestamp.localString.substring(0..22)
+        val message = "$time ${e.level} $loggerOrFile : ${e.evalTemplate()}"
+        val cleanedItems = e.items - "file"
+        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+        return message + maybeItems + maybeStackTrace
+    }
 }
-val CUSTOM_RENDERER_ANSI: RenderString = { e: LogEvent ->
-    val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-    val time = e.timestamp.localString.substring(0..22)
-    val message = "$time ${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
-    val cleanedItems = e.items - "file"
-    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-    message + maybeItems + maybeStackTrace
+val CUSTOM_RENDERER_ANSI: RenderString = object: RenderString {
+    override fun invoke(e: LogEvent): String {
+        val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
+        val time = e.timestamp.localString.substring(0..22)
+        val message = "$time ${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
+        val cleanedItems = e.items - "file"
+        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+        return message + maybeItems + maybeStackTrace
+    }
 }
 
 //fun logFile(file: File, append: Boolean = false): SendString {
@@ -67,6 +74,41 @@ val CUSTOM_RENDERER_ANSI: RenderString = { e: LogEvent ->
 val logScope = CoroutineScope(
     Dispatchers.IO.limitedParallelism(10) + CoroutineName("log")
 )
+
+class LogFile(
+    file: File,
+    append: Boolean = false
+): SendString {
+    private val channel = Channel<String>()
+    init {
+        runBlocking {
+            file.parentFile.mkdirs()
+            if(!append && file.exists()) {
+                file.delete()
+                withContext(Dispatchers.IO) {
+                    file.createNewFile()
+                }
+            } else if(!file.exists()) {
+                withContext(Dispatchers.IO) {
+                    file.createNewFile()
+                }
+            }
+            logScope.launch {
+                file.writeChannel().use {
+                    for (line in channel) {
+                        writeStringUtf8(line + "\n")
+                    }
+                }
+            }
+        }
+    }
+
+    override fun invoke(eventString: String) {
+        logScope.launch {
+            channel.send(eventString)
+        }
+    }
+}
 
 suspend fun logFile(file: File, append: Boolean = false): SendString {
     file.parentFile.mkdirs()
@@ -90,9 +132,11 @@ suspend fun logFile(file: File, append: Boolean = false): SendString {
         }
     }
 
-    return { line ->
-        logScope.launch {
-            channel.send(line)
+    return object : SendString {
+        override fun invoke(eventString: String) {
+            logScope.launch {
+                channel.send(eventString)
+            }
         }
     }
 }
