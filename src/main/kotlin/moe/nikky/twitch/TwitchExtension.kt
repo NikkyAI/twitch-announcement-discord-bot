@@ -659,6 +659,46 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
             }
+            ephemeralSubCommand() {
+                name = "cleanup"
+                description = "deletes old messages sent by the bot"
+                requireBotPermissions(
+//                    Permission.ManageMessages,
+                )
+                check {
+                    with(configurationExtension) { requiresBotControl() }
+                }
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val channel = event.interaction.channel.asChannel()
+                        val before = Clock.System.now() - 7.days
+
+                        val twitchGuildConfig = guild.config().get() ?: TwitchGuildConfig()
+
+                        val isInConfig = twitchGuildConfig.configs.entries.any {
+                            it.value.channelId == channel.id
+                        }
+
+                        if(!isInConfig) relayError("current channel is not found in the twitch config")
+
+                        val messagesToDelete = channel.messages
+                            .filter {
+                                it.author?.id == this@TwitchExtension.kord.selfId
+                            }
+                            .filter {
+                                val timestamp = it.editedTimestamp ?: it.timestamp
+                                timestamp < before
+                            }
+                            .toList()
+                            .sortedByDescending { it.timestamp }
+
+                        messagesToDelete.forEach {
+                            channel.deleteMessage(it.id)
+                        }
+
+                    }
+                }
+            }
         }
     }
 
