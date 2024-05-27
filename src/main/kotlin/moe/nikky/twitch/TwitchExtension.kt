@@ -65,7 +65,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -674,22 +673,28 @@ class TwitchExtension() : Extension(), Klogging {
                         val channel = event.interaction.channel.asChannelOf<TopGuildMessageChannel>()
                         val before = Clock.System.now() - 7.days
 
-                        val webhook = getWebhook(channel = channel, create = false)
+                        val webhooks = findWebhooks(channel = channel)
                             ?: relayError("could not find assosciated webhook")
 
-                        val messagesToDelete = channel.getMessagesBefore(
-                            messageId = channel.lastMessageId ?: relayError("empty channel"),
-                            limit = 1000,
-                        )
-                            .filter {
-                                it.webhookId == webhook.id
-                            }
-                            .filter {
-                                val timestamp = it.editedTimestamp ?: it.timestamp
-                                timestamp < before
-                            }
-                            .toList()
-                            .sortedBy { it.editedTimestamp ?: it.timestamp }
+
+                        val messagesToDelete = webhooks.flatMap { webhook ->
+                            val token = webhook.token ?: return@flatMap emptyList()
+                            val messagesToDelete = channel.getMessagesBefore(
+                                messageId = channel.lastMessageId ?: relayError("empty channel"),
+                                limit = 1000,
+                            )
+                                .filter {
+                                    it.webhookId == webhook.id
+                                }
+                                .filter {
+                                    val timestamp = it.editedTimestamp ?: it.timestamp
+                                    timestamp < before
+                                }
+                                .toList()
+                                .sortedBy { it.editedTimestamp ?: it.timestamp }
+
+                            messagesToDelete.map { message -> message to webhook }
+                        }
 
                         val followUp = respond {
                             content = """
@@ -697,12 +702,12 @@ class TwitchExtension() : Extension(), Klogging {
                             """.trimIndent()
                         }
 
-                        val webhookToken = webhook.token ?: relayError("webhook is missing token")
-                        val deleted = messagesToDelete.map { message ->
+                        val deleted = messagesToDelete.map { (message, webhook) ->
                             delay(1)
-                            logger.debugF { "deleting message ${message.getJumpUrl()}" }
+                            val token = webhook.token ?: return@map false
+//                            logger.debugF { "deleting message ${message.getJumpUrl()}" }
                             try {
-                                webhook.deleteMessage(webhookToken, message.id)
+                                webhook.deleteMessage(token, message.id)
 //                                channel.deleteMessage(message.id)
                                 true
                             } catch (e: Exception) {
@@ -797,7 +802,6 @@ class TwitchExtension() : Extension(), Klogging {
 
     private suspend fun getWebhook(
         channel: TopGuildMessageChannelBehavior,
-        create: Boolean = true,
     ): Webhook? {
         return try {
             webhooksCache.getOrPut(channel.id) {
@@ -807,8 +811,7 @@ class TwitchExtension() : Extension(), Klogging {
                 }?.also { webhook ->
                     logger.traceF { "found webhook" }
                     webhooksCache[channel.id] = webhook
-                } ?: if(create) {
-                    channel.createWebhook(name = webhookName) {
+                } ?: channel.createWebhook(name = webhookName) {
                         avatar = Image.raw(
                             data = TwitchExtension::class.java
                                 .getResourceAsStream("/twitch/TwitchGlitchPurple.png")
@@ -819,10 +822,24 @@ class TwitchExtension() : Extension(), Klogging {
                         logger.infoF { "created webhook $webhook" }
                         webhooksCache[channel.id] = webhook
                     }
-                } else {
-                    return null
-                }
             }
+        } catch (e: KtorRequestException) {
+            logger.errorF { e.message }
+            null
+        }
+    }
+
+
+    private suspend fun findWebhooks(
+        channel: TopGuildMessageChannelBehavior,
+    ): List<Webhook>? {
+        return try {
+            val webhookName = WEBHOOK_NAME_PREFIX + "-" + kord.getSelf().username
+            channel.webhooks
+                .filter {
+                    it.name == webhookName && it.token != null
+                }
+                .toList()
         } catch (e: KtorRequestException) {
             logger.errorF { e.message }
             null
