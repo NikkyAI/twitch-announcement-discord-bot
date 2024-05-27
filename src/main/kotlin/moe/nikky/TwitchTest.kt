@@ -1,7 +1,7 @@
 package moe.nikky
 
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.toList
 import moe.nikky.twitch.TwitchApi.getSchedule
 import moe.nikky.twitch.TwitchApi.getToken
 
-private val httpClient = HttpClient(CIO) {
+private val httpClient = HttpClient(OkHttp) {
     install(ContentNegotiation) {
         json()
     }

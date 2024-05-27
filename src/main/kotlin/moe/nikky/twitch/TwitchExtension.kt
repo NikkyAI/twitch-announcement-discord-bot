@@ -53,7 +53,7 @@ import dev.kord.rest.request.RestRequestException
 import io.klogging.Klogging
 import io.klogging.context.logContext
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.forms.*
 import io.ktor.serialization.kotlinx.json.*
@@ -96,6 +96,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.toJavaDuration
 
 class TwitchExtension() : Extension(), Klogging {
     override val name = "twitch-notifications"
@@ -150,16 +151,21 @@ class TwitchExtension() : Extension(), Klogging {
 //    }
 //    private val httpClient = kord.resources.httpClient
 
-    private val httpClient = HttpClient(CIO) {
+    private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json()
         }
         engine {
-            requestTimeout = 15_000
-            endpoint {
-                connectTimeout = 5_000
-                connectAttempts = 5
+            config {
+                readTimeout(15.seconds.toJavaDuration())
+                connectTimeout(5.seconds.toJavaDuration())
+                retryOnConnectionFailure(true)
             }
+//            requestTimeout = 15_000
+//            endpoint {
+//                connectTimeout = 5_000
+//                connectAttempts = 5
+//            }
         }
 //        install(Logging) {
 //            logger = Logger.DEFAULT

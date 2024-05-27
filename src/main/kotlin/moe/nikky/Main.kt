@@ -75,13 +75,14 @@ suspend fun main() {
                 pingInReply = true
             }
             extPhishing {
-                appName = "Yuno"
+//                appName = "Yuno"
             }
 //            extPluralKit()
         }
         presence {
             status = PresenceStatus.Idle
             afk = true
+            state = "booting"
         }
         hooks {
             kordShutdownHook = true
