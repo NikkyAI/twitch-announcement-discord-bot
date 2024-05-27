@@ -32,6 +32,7 @@ import dev.kord.common.toMessageFormat
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.TopGuildMessageChannelBehavior
+import dev.kord.core.behavior.channel.asChannelOf
 import dev.kord.core.behavior.channel.createWebhook
 import dev.kord.core.behavior.createScheduledEvent
 import dev.kord.core.behavior.execute
@@ -64,6 +65,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -93,7 +95,6 @@ import org.koin.dsl.module
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.ExperimentalTime
 import kotlin.time.toJavaDuration
 
 class TwitchExtension() : Extension(), Klogging {
@@ -662,35 +663,33 @@ class TwitchExtension() : Extension(), Klogging {
             ephemeralSubCommand() {
                 name = "cleanup"
                 description = "deletes old messages sent by the bot"
-                requireBotPermissions(
+//                requireBotPermissions(
 //                    Permission.ManageMessages,
-                )
+//                )
                 check {
                     with(configurationExtension) { requiresBotControl() }
                 }
                 action {
                     withLogContext(event, guild) { guild ->
-                        val channel = event.interaction.channel.asChannel()
+                        val channel = event.interaction.channel.asChannelOf<TopGuildMessageChannel>()
                         val before = Clock.System.now() - 7.days
 
-                        val twitchGuildConfig = guild.config().get() ?: TwitchGuildConfig()
+                        val webhook = getWebhook(channel = channel, create = false)
+                            ?: relayError("could not find assosciated webhook")
 
-                        val isInConfig = twitchGuildConfig.configs.entries.any {
-                            it.value.channelId == channel.id
-                        }
-
-                        if(!isInConfig) relayError("current channel is not found in the twitch config")
-
-                        val messagesToDelete = channel.messages
+                        val messagesToDelete = channel.getMessagesBefore(
+                            messageId = channel.lastMessageId ?: relayError("empty channel"),
+                            limit = 1000,
+                        )
                             .filter {
-                                it.author?.id == this@TwitchExtension.kord.selfId
+                                it.webhookId == webhook.id
                             }
                             .filter {
                                 val timestamp = it.editedTimestamp ?: it.timestamp
                                 timestamp < before
                             }
                             .toList()
-                            .sortedByDescending { it.timestamp }
+                            .sortedBy { it.editedTimestamp ?: it.timestamp }
 
                         val followUp = respond {
                             content = """
@@ -698,13 +697,16 @@ class TwitchExtension() : Extension(), Klogging {
                             """.trimIndent()
                         }
 
-                        val deleted = messagesToDelete.map {
-                            logger.debugF { "deleting message ${it.getJumpUrl()}" }
+                        val webhookToken = webhook.token ?: relayError("webhook is missing token")
+                        val deleted = messagesToDelete.map { message ->
+                            delay(1)
+                            logger.debugF { "deleting message ${message.getJumpUrl()}" }
                             try {
-                                channel.deleteMessage(it.id)
+                                webhook.deleteMessage(webhookToken, message.id)
+//                                channel.deleteMessage(message.id)
                                 true
                             } catch (e: Exception) {
-                                logger.errorF(e) {"failed to delete message ${it.getJumpUrl()}"}
+                                logger.errorF(e) { "failed to delete message ${message.getJumpUrl()}" }
                                 false
                             }
                         }.count { it }
@@ -793,8 +795,10 @@ class TwitchExtension() : Extension(), Klogging {
         return "removed ${arguments.twitchUserName} from ${channel.mention}"
     }
 
-    @OptIn(ExperimentalTime::class)
-    private suspend fun getWebhook(channel: TopGuildMessageChannelBehavior): Webhook? {
+    private suspend fun getWebhook(
+        channel: TopGuildMessageChannelBehavior,
+        create: Boolean = true,
+    ): Webhook? {
         return try {
             webhooksCache.getOrPut(channel.id) {
                 val webhookName = WEBHOOK_NAME_PREFIX + "-" + kord.getSelf().username
@@ -803,16 +807,20 @@ class TwitchExtension() : Extension(), Klogging {
                 }?.also { webhook ->
                     logger.traceF { "found webhook" }
                     webhooksCache[channel.id] = webhook
-                } ?: channel.createWebhook(name = webhookName) {
-                    avatar = Image.raw(
-                        data = TwitchExtension::class.java
-                            .getResourceAsStream("/twitch/TwitchGlitchPurple.png")
-                            ?.readBytes() ?: error("failed to read bytes"),
-                        format = Image.Format.PNG,
-                    )
-                }.also { webhook ->
-                    logger.infoF { "created webhook $webhook" }
-                    webhooksCache[channel.id] = webhook
+                } ?: if(create) {
+                    channel.createWebhook(name = webhookName) {
+                        avatar = Image.raw(
+                            data = TwitchExtension::class.java
+                                .getResourceAsStream("/twitch/TwitchGlitchPurple.png")
+                                ?.readBytes() ?: error("failed to read bytes"),
+                            format = Image.Format.PNG,
+                        )
+                    }.also { webhook ->
+                        logger.infoF { "created webhook $webhook" }
+                        webhooksCache[channel.id] = webhook
+                    }
+                } else {
+                    return null
                 }
             }
         } catch (e: KtorRequestException) {
