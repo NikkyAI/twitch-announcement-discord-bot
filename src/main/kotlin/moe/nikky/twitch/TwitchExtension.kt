@@ -692,10 +692,28 @@ class TwitchExtension() : Extension(), Klogging {
                             .toList()
                             .sortedByDescending { it.timestamp }
 
-                        messagesToDelete.forEach {
-                            channel.deleteMessage(it.id)
+                        val followUp = respond {
+                            content = """
+                                deleting ${messagesToDelete.size} messages ...
+                            """.trimIndent()
                         }
 
+                        val deleted = messagesToDelete.map {
+                            logger.debugF { "deleting message ${it.getJumpUrl()}" }
+                            try {
+                                channel.deleteMessage(it.id)
+                                true
+                            } catch (e: Exception) {
+                                logger.errorF(e) {"failed to delete message ${it.getJumpUrl()}"}
+                                false
+                            }
+                        }.count { it }
+
+                        followUp.edit {
+                            content = """
+                                deleted $deleted messages ✅
+                            """.trimIndent()
+                        }
                     }
                 }
             }
