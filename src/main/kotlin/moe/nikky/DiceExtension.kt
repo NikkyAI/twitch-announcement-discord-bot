@@ -1,6 +1,10 @@
 package moe.nikky
 
-import br.com.colman.dicehelper.*
+import br.com.colman.dicehelper.Dice
+import br.com.colman.dicehelper.DiceNotation
+import br.com.colman.dicehelper.FixedDice
+import br.com.colman.dicehelper.RandomDice
+import br.com.colman.dicehelper.diceNotation
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.converters.impl.string
 import com.kotlindiscord.kord.extensions.extensions.Extension

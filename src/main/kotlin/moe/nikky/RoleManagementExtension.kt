@@ -1,14 +1,9 @@
 package moe.nikky
 
 import com.kotlindiscord.kord.extensions.DiscordRelayedException
-import com.kotlindiscord.kord.extensions.checks.anyGuild
-import com.kotlindiscord.kord.extensions.checks.guildFor
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.CommandContext
 import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.ColorConverter
-import com.kotlindiscord.kord.extensions.commands.converters.impl.boolean
-import com.kotlindiscord.kord.extensions.commands.converters.impl.color
 import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingBoolean
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
 import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalColor
@@ -38,17 +33,12 @@ import dev.kord.core.behavior.MessageBehavior
 import dev.kord.core.behavior.channel.ChannelBehavior
 import dev.kord.core.behavior.channel.asChannelOf
 import dev.kord.core.behavior.channel.createMessage
-import dev.kord.core.behavior.channel.editMemberPermission
-import dev.kord.core.behavior.channel.editRolePermission
 import dev.kord.core.behavior.createRole
 import dev.kord.core.behavior.edit
-import dev.kord.core.behavior.getChannelOfOrNull
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
-import dev.kord.core.entity.channel.GuildChannel
-import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.event.guild.GuildCreateEvent
 import dev.kord.core.live.live
@@ -57,14 +47,11 @@ import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
 import io.github.xn32.json5k.Json5
 import io.klogging.Klogging
-import io.klogging.context.logContext
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
@@ -73,8 +60,7 @@ import kotlinx.serialization.builtins.serializer
 import moe.nikky.converter.reactionEmoji
 import org.koin.core.component.inject
 import org.koin.dsl.module
-import java.lang.Exception
-import java.util.*
+import java.util.Locale
 
 class RoleManagementExtension : Extension(), Klogging {
     override val name: String = "role-management"

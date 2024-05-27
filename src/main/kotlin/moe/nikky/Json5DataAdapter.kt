@@ -7,7 +7,6 @@ import com.kotlindiscord.kord.extensions.storage.DataAdapter
 import com.kotlindiscord.kord.extensions.storage.StorageUnit
 import com.kotlindiscord.kord.extensions.storage.storageFileRoot
 import io.github.xn32.json5k.Json5
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.div

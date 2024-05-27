@@ -9,12 +9,10 @@ import dev.kord.core.entity.Message
 import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
-import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.rest.request.KtorRequestException
 import io.github.xn32.json5k.SerialComment
 import io.klogging.context.logContext
 import io.klogging.logger
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable

@@ -26,7 +26,7 @@ import moe.nikky.checks.anyCheck
 import moe.nikky.checks.hasRoleNullable
 import net.peanuuutz.tomlkt.TomlComment
 import org.koin.dsl.module
-import java.util.*
+import java.util.Locale
 
 class ConfigurationExtension : Extension(), Klogging {
     override val name: String = "configuration-extension"

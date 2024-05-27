@@ -3,7 +3,14 @@ package moe.nikky.json
 import io.klogging.Klogging
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonTransformingSerializer
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import moe.nikky.debugF
 
 data class VersionMigrator<T : Any, R : Any>(

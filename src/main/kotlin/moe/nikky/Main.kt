@@ -23,7 +23,7 @@ import org.koin.dsl.module
 import java.io.File
 import java.security.Security
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
 
 private val logger = logger("moe.nikky.Main")
 val TEST_GUILD_ID = envOrNull("TEST_GUILD")?.let { Snowflake(it) }

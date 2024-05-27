@@ -45,9 +45,7 @@ import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
 import dev.kord.rest.Image
 import dev.kord.rest.builder.message.EmbedBuilder
-import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.embed
-import dev.kord.rest.builder.message.modify.embed
 import dev.kord.rest.request.KtorRequestException
 import dev.kord.rest.request.RestRequestException
 import io.klogging.Klogging
