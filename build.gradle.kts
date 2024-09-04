@@ -71,14 +71,21 @@ dependencies {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_16
-    targetCompatibility = JavaVersion.VERSION_16
+//    sourceCompatibility = JavaVersion.VERSION_16
+//    targetCompatibility = JavaVersion.VERSION_16
 }
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "16"
-    }
-}
+
+//tasks.named("compileKotlin", org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask::class.java) {
+//    compilerOptions {
+//        freeCompilerArgs.add("-Xexport-kdoc")
+//    }
+//}
+
+//tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask> {
+//    compilerOptions {
+//        jvmTarget = "16"
+//    }
+//}
 
 tasks {
     test {

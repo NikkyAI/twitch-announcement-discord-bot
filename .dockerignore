@@ -4,6 +4,7 @@
 !/src/**
 !/build/libs/application.jar
 !/build.gradle.kts
+!/gradle.properties
 !/gradlew
 !/settings.gradle.kts
 !/version_key_rules.txt
