@@ -6,6 +6,7 @@ import dev.kordex.gradle.plugins.kordex.DataCollection
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
+    id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
     id("dev.kordex.gradle.kordex")
 }
