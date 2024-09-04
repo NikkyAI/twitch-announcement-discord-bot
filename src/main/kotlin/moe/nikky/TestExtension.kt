@@ -81,73 +81,73 @@ class TestExtension : Extension(), Klogging {
                 }
             }
         }
-        ephemeralSlashCommand {
-            name = "events"
-            description = "scheduled events things"
-            allowInDms = false
-
-            ephemeralSubCommand(::ScheduleArgs) {
-                name = "create"
-                description = "creates a scheduled event"
-
-                requireBotPermissions(
-                    Permission.ManageEvents
-                )
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        updateSchedule(
-                            guild = guild,
-                            startTime = Clock.System.now() + (arguments.delay?.toDuration() ?: 10.minutes),
-                            name = arguments.title,
-                            description = arguments.description,
-                            location = arguments.location,
-                        )
-                        respond {
-                            content = "event created"
-                        }
-                    }
-                }
-            }
-
-            ephemeralSubCommand() {
-                name = "list"
-                description = "list events"
-
-
-                requireBotPermissions(
-
-                )
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val events = guild.scheduledEvents.toList()
-                        val messages = events.map { event ->
-                            val status = event.status::class.simpleName
-                            val type = event.entityType::class.simpleName
-                            val location = event.entityMetadata?.location?.value
-                                """>
-                                event: ${event.name}
-                                description: ${event.description}
-                                start: ${event.scheduledStartTime}
-                                end: ${event.scheduledEndTime}
-                                status: ${status}
-                                type: ${type}
-                                location: $location
-                                metadata: ${event.entityMetadata}
-                                data: ${event.data}
-                            """.trimIndent().also {
-                                this@TestExtension.logger.infoF { it }
-                            }
-                        }
-                        respond {
-                            this.content = "${messages.size} \n" + messages.joinToString { "\n\n" }
-                        }
-                    }
-
-                }
-            }
-        }
+//        ephemeralSlashCommand {
+//            name = "events"
+//            description = "scheduled events things"
+//            allowInDms = false
+//
+//            ephemeralSubCommand(::ScheduleArgs) {
+//                name = "create"
+//                description = "creates a scheduled event"
+//
+//                requireBotPermissions(
+//                    Permission.ManageEvents
+//                )
+//
+//                action {
+//                    withLogContext(event, guild) { guild ->
+//                        updateSchedule(
+//                            guild = guild,
+//                            startTime = Clock.System.now() + (arguments.delay?.toDuration() ?: 10.minutes),
+//                            name = arguments.title,
+//                            description = arguments.description,
+//                            location = arguments.location,
+//                        )
+//                        respond {
+//                            content = "event created"
+//                        }
+//                    }
+//                }
+//            }
+//
+//            ephemeralSubCommand() {
+//                name = "list"
+//                description = "list events"
+//
+//
+//                requireBotPermissions(
+//
+//                )
+//
+//                action {
+//                    withLogContext(event, guild) { guild ->
+//                        val events = guild.scheduledEvents.toList()
+//                        val messages = events.map { event ->
+//                            val status = event.status::class.simpleName
+//                            val type = event.entityType::class.simpleName
+//                            val location = event.entityMetadata?.location?.value
+//                                """>
+//                                event: ${event.name}
+//                                description: ${event.description}
+//                                start: ${event.scheduledStartTime}
+//                                end: ${event.scheduledEndTime}
+//                                status: ${status}
+//                                type: ${type}
+//                                location: $location
+//                                metadata: ${event.entityMetadata}
+//                                data: ${event.data}
+//                            """.trimIndent().also {
+//                                this@TestExtension.logger.infoF { it }
+//                            }
+//                        }
+//                        respond {
+//                            this.content = "${messages.size} \n" + messages.joinToString { "\n\n" }
+//                        }
+//                    }
+//
+//                }
+//            }
+//        }
 
 //        ephemeralMessageCommand {
 //            name = "testmessagecmd"

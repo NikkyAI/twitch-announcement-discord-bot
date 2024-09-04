@@ -63,7 +63,8 @@ class ConfigurationExtension : Extension(), Klogging {
         val self = kord.getSelf()
         ephemeralSlashCommand {
             name = "config"
-            description = "${self.username} related commands"
+//            description = "${self.username} related commands"
+            description = "self.username related commands"
             allowInDms = false
 
             ephemeralSubCommand(::SetAdminRoleArgs) {

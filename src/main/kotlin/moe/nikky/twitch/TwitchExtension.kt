@@ -428,8 +428,80 @@ class TwitchExtension() : Extension(), Klogging {
                 }
             }
 
+            ephemeralSubCommand() {
+                name = "cleanup"
+                description = "deletes old messages sent by the bot"
+//                requireBotPermissions(
+//                    Permission.ManageMessages,
+//                )
+                check {
+                    with(configurationExtension) { requiresBotControl() }
+                }
+                action {
+                    withLogContext(event, guild) { guild ->
+                        val channel = event.interaction.channel.asChannelOf<TopGuildMessageChannel>()
+                        val before = Clock.System.now() - 7.days
+
+                        val webhooks = findWebhooks(channel = channel)
+                            ?: relayError("could not find assosciated webhook")
+
+
+                        val messagesToDelete = webhooks.flatMap { webhook ->
+                            val token = webhook.token ?: return@flatMap emptyList()
+                            val messagesToDelete = channel.getMessagesBefore(
+                                messageId = channel.lastMessageId ?: relayError("empty channel"),
+                                limit = 1000,
+                            )
+                                .filter {
+                                    it.webhookId == webhook.id
+                                }
+                                .filter {
+                                    val timestamp = it.editedTimestamp ?: it.timestamp
+                                    timestamp < before
+                                }
+                                .toList()
+                                .sortedBy { it.editedTimestamp ?: it.timestamp }
+
+                            messagesToDelete.map { message -> message to webhook }
+                        }
+
+                        val followUp = respond {
+                            content = """
+                                deleting ${messagesToDelete.size} messages ...
+                            """.trimIndent()
+                        }
+
+                        val deleted = messagesToDelete.map { (message, webhook) ->
+                            delay(1)
+                            val token = webhook.token ?: return@map false
+//                            logger.debugF { "deleting message ${message.getJumpUrl()}" }
+                            try {
+                                webhook.deleteMessage(token, message.id)
+//                                channel.deleteMessage(message.id)
+                                true
+                            } catch (e: Exception) {
+                                logger.errorF(e) { "failed to delete message ${message.getJumpUrl()}" }
+                                false
+                            }
+                        }.count { it }
+
+                        followUp.edit {
+                            content = """
+                                deleted $deleted messages ✅
+                            """.trimIndent()
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        ephemeralSlashCommand {
+            name = "twitchSchedule"
+            description = "twitch schedule sync"
+            allowInDms = false
             ephemeralSubCommand(::TwitchScheduleSyncArgs) {
-                name = "schedule-sync"
+                name = "sync"
                 description = "synchronize schedule"
 
                 requireBotPermissions(
@@ -566,7 +638,7 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::TwitchScheduleDeleteArgs) {
-                name = "schedule-delete"
+                name = "delete"
                 description = "delete all events for a twitch user"
 
                 requireBotPermissions(
@@ -609,7 +681,7 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::TwitchScheduleListArgs) {
-                name = "schedule-list"
+                name = "list"
                 description = "list streamer schedule"
 
                 requireBotPermissions(
@@ -659,72 +731,8 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
             }
-            ephemeralSubCommand() {
-                name = "cleanup"
-                description = "deletes old messages sent by the bot"
-//                requireBotPermissions(
-//                    Permission.ManageMessages,
-//                )
-                check {
-                    with(configurationExtension) { requiresBotControl() }
-                }
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val channel = event.interaction.channel.asChannelOf<TopGuildMessageChannel>()
-                        val before = Clock.System.now() - 7.days
-
-                        val webhooks = findWebhooks(channel = channel)
-                            ?: relayError("could not find assosciated webhook")
-
-
-                        val messagesToDelete = webhooks.flatMap { webhook ->
-                            val token = webhook.token ?: return@flatMap emptyList()
-                            val messagesToDelete = channel.getMessagesBefore(
-                                messageId = channel.lastMessageId ?: relayError("empty channel"),
-                                limit = 1000,
-                            )
-                                .filter {
-                                    it.webhookId == webhook.id
-                                }
-                                .filter {
-                                    val timestamp = it.editedTimestamp ?: it.timestamp
-                                    timestamp < before
-                                }
-                                .toList()
-                                .sortedBy { it.editedTimestamp ?: it.timestamp }
-
-                            messagesToDelete.map { message -> message to webhook }
-                        }
-
-                        val followUp = respond {
-                            content = """
-                                deleting ${messagesToDelete.size} messages ...
-                            """.trimIndent()
-                        }
-
-                        val deleted = messagesToDelete.map { (message, webhook) ->
-                            delay(1)
-                            val token = webhook.token ?: return@map false
-//                            logger.debugF { "deleting message ${message.getJumpUrl()}" }
-                            try {
-                                webhook.deleteMessage(token, message.id)
-//                                channel.deleteMessage(message.id)
-                                true
-                            } catch (e: Exception) {
-                                logger.errorF(e) { "failed to delete message ${message.getJumpUrl()}" }
-                                false
-                            }
-                        }.count { it }
-
-                        followUp.edit {
-                            content = """
-                                deleted $deleted messages ✅
-                            """.trimIndent()
-                        }
-                    }
-                }
-            }
         }
+        */
     }
 
     private suspend fun add(

@@ -34,7 +34,7 @@ class DiceExtension() : Extension(), Klogging {
                         content = """
                         |notation: ${diceNotation.getDisplayString()}
                         |total:: Σ ${result.total}
-                        |dice:: 
+                        |dice::
                         |$dices
                     """.trimMargin()
                     }

@@ -65,6 +65,7 @@ suspend fun main() {
             add(::RoleManagementExtension)
             add(::TwitchExtension)
             add(::LocalTimeExtension)
+//            add(::SchedulingExtension)
             if (TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
@@ -145,8 +146,16 @@ suspend fun setupLogging() {
             applyFromMinLevel(Level.INFO)
         }
         logging {
+            fromLoggerBase("com.kotlindiscord.kord.extensions.modules.extra.phishing", stopOnMatch = true)
+            applyFromMinLevel(Level.WARN)
+        }
+        logging {
+            fromLoggerBase("com.kotlindiscord.kord.extensions.checks", stopOnMatch = true)
+            applyFromMinLevel(Level.WARN)
+        }
+        logging {
             fromLoggerBase("com.kotlindiscord.kord.extensions", stopOnMatch = true)
-            applyFromMinLevel(Level.INFO)
+            applyFromMinLevel(Level.TRACE)
         }
         logging {
             applyFromMinLevel(Level.INFO)

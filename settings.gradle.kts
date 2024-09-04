@@ -7,7 +7,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.develocity") version "3.17.4"
+    id("com.gradle.develocity") version "3.18"
     id("de.fayard.refreshVersions") version "0.60.5"
 }
 
