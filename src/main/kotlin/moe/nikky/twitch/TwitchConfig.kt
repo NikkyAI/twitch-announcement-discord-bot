@@ -1,6 +1,5 @@
 package moe.nikky.twitch;
 
-import com.kotlindiscord.kord.extensions.storage.Data
 import dev.kord.common.entity.Snowflake;
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.getChannelOfOrNull
@@ -9,6 +8,7 @@ import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.NewsChannel
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.core.entity.channel.TopGuildMessageChannel
+import dev.kordex.core.storage.Data
 import io.klogging.context.logContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi

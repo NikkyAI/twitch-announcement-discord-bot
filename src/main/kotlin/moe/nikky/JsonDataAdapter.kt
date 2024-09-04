@@ -2,10 +2,10 @@
 
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.storage.Data
-import com.kotlindiscord.kord.extensions.storage.DataAdapter
-import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.storage.storageFileRoot
+import dev.kordex.core.storage.Data
+import dev.kordex.core.storage.DataAdapter
+import dev.kordex.core.storage.StorageUnit
+import dev.kordex.core.storage.storageFileRoot
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Path

@@ -1,22 +1,5 @@
 package moe.nikky.twitch
 
-import com.kotlindiscord.kord.extensions.DiscordRelayedException
-import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingBoolean
-import com.kotlindiscord.kord.extensions.commands.converters.impl.defaultingInt
-import com.kotlindiscord.kord.extensions.commands.converters.impl.optionalChannel
-import com.kotlindiscord.kord.extensions.commands.converters.impl.role
-import com.kotlindiscord.kord.extensions.commands.converters.impl.string
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
-import com.kotlindiscord.kord.extensions.storage.StorageType
-import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.time.TimestampType.RelativeTime
-import com.kotlindiscord.kord.extensions.utils.getJumpUrl
-import com.kotlindiscord.kord.extensions.utils.isPublished
-import com.kotlindiscord.kord.extensions.utils.scheduling.Scheduler
-import com.kotlindiscord.kord.extensions.utils.scheduling.Task
 import dev.kord.common.Color
 import dev.kord.common.entity.ChannelType
 import dev.kord.common.entity.GuildScheduledEventEntityMetadata
@@ -49,6 +32,24 @@ import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.embed
 import dev.kord.rest.request.KtorRequestException
 import dev.kord.rest.request.RestRequestException
+import dev.kordex.core.DiscordRelayedException
+import dev.kordex.core.commands.Arguments
+import dev.kordex.core.commands.application.slash.ephemeralSubCommand
+import dev.kordex.core.commands.application.slash.group
+import dev.kordex.core.commands.converters.impl.defaultingBoolean
+import dev.kordex.core.commands.converters.impl.defaultingInt
+import dev.kordex.core.commands.converters.impl.optionalChannel
+import dev.kordex.core.commands.converters.impl.string
+import dev.kordex.core.commands.converters.impl.role
+import dev.kordex.core.extensions.Extension
+import dev.kordex.core.extensions.ephemeralSlashCommand
+import dev.kordex.core.storage.StorageType
+import dev.kordex.core.storage.StorageUnit
+import dev.kordex.core.time.TimestampType
+import dev.kordex.core.utils.getJumpUrl
+import dev.kordex.core.utils.isPublished
+import dev.kordex.core.utils.scheduling.Scheduler
+import dev.kordex.core.utils.scheduling.Task
 import io.klogging.Klogging
 import io.klogging.context.logContext
 import io.ktor.client.*
@@ -271,7 +272,7 @@ class TwitchExtension() : Extension(), Klogging {
             }
         }
         val includeCancelled by defaultingBoolean {
-            name = "include-cancelled"
+            name = "include_cancelled"
             description = "also list cancelled events"
             defaultValue = false
         }
@@ -493,246 +494,216 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
             }
-        }
-
-        /*
-        ephemeralSlashCommand {
-            name = "twitchSchedule"
-            description = "twitch schedule sync"
-            allowInDms = false
-            ephemeralSubCommand(::TwitchScheduleSyncArgs) {
-                name = "sync"
-                description = "synchronize schedule"
-
-                requireBotPermissions(
-                    Permission.ManageEvents,
-                )
-                check {
-                    with(configurationExtension) { requiresBotControl() }
-                }
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken()
-                        val userData = httpClient.getUsers(
-                            logins = listOf(arguments.twitchUserName),
-                            token = token,
-                        )[arguments.twitchUserName]
-                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
-
-                        val segments = httpClient.getSchedule(
-                            token = token,
-                            broadcasterId = userData.id,
-                        ).filter { it.canceledUntil == null && it.vacationCancelledUntil == null }
-                            .take(arguments.amount).toList().distinct()
-
-                        val existingEvents = guild.scheduledEvents
-                            .filter { event -> event.entityType == ScheduledEntityType.External }
-                            .filter { event ->
-                                event.location?.contains("https://twitch.tv/${userData.login}") ?: false
-                            }
-                            .toList()
-
-                        val segmentsWithEvents = segments.associateWith { segment ->
-                            val now = Clock.System.now()
-                            val title = segment.title + (segment.category?.name?.let { " - $it" } ?: "")
-                            existingEvents
-                                .filter { event -> event.name == title }
+            group("schedule") {
+                description = "twitch schedule sync"
+                ephemeralSubCommand(::TwitchScheduleSyncArgs) {
+                    name = "sync"
+                    description = "synchronize schedule"
+                    requireBotPermissions(
+                        Permission.ManageEvents,
+                    )
+                    check {
+                        with(configurationExtension) { requiresBotControl() }
+                    }
+                    action {
+                        withLogContext(event, guild) { guild ->
+                            val token = httpClient.getToken()
+                            val userData = httpClient.getUsers(
+                                logins = listOf(arguments.twitchUserName),
+                                token = token,
+                            )[arguments.twitchUserName]
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                            val segments = httpClient.getSchedule(
+                                token = token,
+                                broadcasterId = userData.id,
+                            ).filter { it.canceledUntil == null && it.vacationCancelledUntil == null }
+                                .take(arguments.amount).toList().distinct()
+                            val existingEvents = guild.scheduledEvents
+                                .filter { event -> event.entityType == ScheduledEntityType.External }
                                 .filter { event ->
-                                    (event.scheduledStartTime < now && event.status == GuildScheduledEventStatus.Active)
-                                            || (event.scheduledStartTime == segment.startTime && event.status == GuildScheduledEventStatus.Scheduled)
+                                    event.location?.contains("https://twitch.tv/${userData.login}") ?: false
                                 }
-                                .filter { event -> event.scheduledEndTime == segment.endTime }
-                                .filter { event -> event.description?.contains(segment.id) ?: false }
-                                .also {
-                                    if (it.size > 1) {
-                                        this@TwitchExtension.logger.warnF { "found ${it.size} events for segment $segment" }
-                                    }
-                                }
-                        }
-
-                        val notMatchingEvents = existingEvents
-                            .filter { event -> event.creatorId == this@TwitchExtension.kord.selfId }
-                            .toSet() - segmentsWithEvents.values.flatten().toSet()
-
-
-                        var followUp = respond {
-                            content = listOfNotNull(
-                                "found ${segments.size} segments",
-                                notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
-                                    "deleting ${it.size} events"
-                                },
-                            ).joinToString("\n")
-                        }
-
-                        notMatchingEvents.forEach {
-                            it.delete()
-                        }
-
-                        val now = Clock.System.now()
-                        val segmentsToCreateEventsFor = segments.filter { segment ->
-                            val existingEventsForSegment = segmentsWithEvents[segment] ?: emptyList()
-                            existingEventsForSegment.isEmpty() && segment.endTime > now
-                        }
-
-                        followUp = followUp.edit {
-                            content = listOfNotNull(
-                                "found ${segments.size} segments",
-                                notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
-                                    "deleted ${it.size} events ✅"
-                                },
-                                segmentsWithEvents.takeIf { it.isNotEmpty() }?.let {
-                                    "creating ${it.size} events ... (this may take about ${((it.size - 5) / 5).minutes}"
-                                },
-                            ).joinToString("\n")
-                        }
-
-                        launch(
-                            this@TwitchExtension.kord.coroutineContext
-                                    + CoroutineName("events-create-${userData.login}")
-                        ) {
-                            val createdEvents = segmentsToCreateEventsFor.map { segment ->
-                                val startTime = segment.startTime.takeIf { it > now } ?: (now + 5.seconds)
+                                .toList()
+                            val segmentsWithEvents = segments.associateWith { segment ->
+                                val now = Clock.System.now()
                                 val title = segment.title + (segment.category?.name?.let { " - $it" } ?: "")
-                                guild.createScheduledEvent(
-                                    name = title,
-                                    privacyLevel = GuildScheduledEventPrivacyLevel.GuildOnly,
-                                    scheduledStartTime = startTime,
-                                    entityType = ScheduledEntityType.External,
-                                ) {
-                                    description = """
-                                            automatically created by ${event.interaction.user.mention} at ${now.toMessageFormat()}
-                                            id: ${segment.id}
-                                        """.trimIndent()
-                                    scheduledEndTime = segment.endTime
-                                    entityMetadata = GuildScheduledEventEntityMetadata(
-                                        location = "https://twitch.tv/${userData.login}".optional()
-                                    )
-                                }.also { event ->
-                                    this@TwitchExtension.logger.infoF { "created event ${event.id} for segment $segment" }
-                                }
+                                existingEvents
+                                    .filter { event -> event.name == title }
+                                    .filter { event ->
+                                        (event.scheduledStartTime < now && event.status == GuildScheduledEventStatus.Active)
+                                                || (event.scheduledStartTime == segment.startTime && event.status == GuildScheduledEventStatus.Scheduled)
+                                    }
+                                    .filter { event -> event.scheduledEndTime == segment.endTime }
+                                    .filter { event -> event.description?.contains(segment.id) ?: false }
+                                    .also {
+                                        if (it.size > 1) {
+                                            this@TwitchExtension.logger.warnF { "found ${it.size} events for segment $segment" }
+                                        }
+                                    }
                             }
-
-                            this@TwitchExtension.logger.infoF { "done creating events" }
-                            followUp.edit {
+                            val notMatchingEvents = existingEvents
+                                .filter { event -> event.creatorId == this@TwitchExtension.kord.selfId }
+                                .toSet() - segmentsWithEvents.values.flatten().toSet()
+                            var followUp = respond {
+                                content = listOfNotNull(
+                                    "found ${segments.size} segments",
+                                    notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
+                                        "deleting ${it.size} events"
+                                    },
+                                ).joinToString("\n")
+                            }
+                            notMatchingEvents.forEach {
+                                it.delete()
+                            }
+                            val now = Clock.System.now()
+                            val segmentsToCreateEventsFor = segments.filter { segment ->
+                                val existingEventsForSegment = segmentsWithEvents[segment] ?: emptyList()
+                                existingEventsForSegment.isEmpty() && segment.endTime > now
+                            }
+                            followUp = followUp.edit {
                                 content = listOfNotNull(
                                     "found ${segments.size} segments",
                                     notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
                                         "deleted ${it.size} events ✅"
                                     },
-                                    "created ${createdEvents.size}/${segmentsToCreateEventsFor.size} events ✅",
-                                    (segmentsToCreateEventsFor.size - createdEvents.size).takeIf { it > 0 }?.let {
-                                        "failed creating $it events ❌"
+                                    segmentsWithEvents.takeIf { it.isNotEmpty() }?.let {
+                                        "creating ${it.size} events ... (this may take about ${((it.size - 5) / 5).minutes}"
                                     },
-                                )
-                                    .joinToString("\n")
-                                    .also {
-                                        this@TwitchExtension.logger.infoF { "message: \n$it" }
+                                ).joinToString("\n")
+                            }
+                            launch(
+                                this@TwitchExtension.kord.coroutineContext
+                                        + CoroutineName("events-create-${userData.login}")
+                            ) {
+                                val createdEvents = segmentsToCreateEventsFor.map { segment ->
+                                    val startTime = segment.startTime.takeIf { it > now } ?: (now + 5.seconds)
+                                    val title = segment.title + (segment.category?.name?.let { " - $it" } ?: "")
+                                    guild.createScheduledEvent(
+                                        name = title,
+                                        privacyLevel = GuildScheduledEventPrivacyLevel.GuildOnly,
+                                        scheduledStartTime = startTime,
+                                        entityType = ScheduledEntityType.External,
+                                    ) {
+                                        description = """
+                                automatically created by ${event.interaction.user.mention} at ${now.toMessageFormat()}
+                                id: ${segment.id}
+                            """.trimIndent()
+                                        scheduledEndTime = segment.endTime
+                                        entityMetadata = GuildScheduledEventEntityMetadata(
+                                            location = "https://twitch.tv/${userData.login}".optional()
+                                        )
+                                    }.also { event ->
+                                        this@TwitchExtension.logger.infoF { "created event ${event.id} for segment $segment" }
                                     }
+                                }
+                                this@TwitchExtension.logger.infoF { "done creating events" }
+                                followUp.edit {
+                                    content = listOfNotNull(
+                                        "found ${segments.size} segments",
+                                        notMatchingEvents.takeIf { it.isNotEmpty() }?.let {
+                                            "deleted ${it.size} events ✅"
+                                        },
+                                        "created ${createdEvents.size}/${segmentsToCreateEventsFor.size} events ✅",
+                                        (segmentsToCreateEventsFor.size - createdEvents.size).takeIf { it > 0 }?.let {
+                                            "failed creating $it events ❌"
+                                        },
+                                    )
+                                        .joinToString("\n")
+                                        .also {
+                                            this@TwitchExtension.logger.infoF { "message: \n$it" }
+                                        }
+                                }
+                                this@TwitchExtension.logger.infoF { "followup edited" }
                             }
-                            this@TwitchExtension.logger.infoF { "followup edited" }
-                        }
-
-                    }
-                }
-            }
-
-            ephemeralSubCommand(::TwitchScheduleDeleteArgs) {
-                name = "delete"
-                description = "delete all events for a twitch user"
-
-                requireBotPermissions(
-                    Permission.ManageEvents,
-                )
-                check {
-                    with(configurationExtension) { requiresBotControl() }
-                }
-
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken()
-                        val userData = httpClient.getUsers(
-                            logins = listOf(arguments.twitchUserName),
-                            token = token,
-                        )[arguments.twitchUserName]
-                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
-
-                        val existingEvents = guild.scheduledEvents
-                            .filter { event -> event.entityType == ScheduledEntityType.External }
-                            .filter { event ->
-                                event.location?.contains("https://twitch.tv/${userData.login}") ?: false
-                            }
-                            .toList()
-                        val followUp = respond {
-                            content = """
-                                deleting ${existingEvents.size} events ...
-                            """.trimIndent()
-                        }
-
-                        existingEvents.forEach { it.delete() }
-
-                        followUp.edit {
-                            content = """
-                                deleted ${existingEvents.size} events ✅
-                            """.trimIndent()
                         }
                     }
                 }
-            }
-
-            ephemeralSubCommand(::TwitchScheduleListArgs) {
-                name = "list"
-                description = "list streamer schedule"
-
-                requireBotPermissions(
-                    Permission.ManageEvents,
-                )
-                action {
-                    withLogContext(event, guild) { guild ->
-                        val token = httpClient.getToken()
-                        val userData = httpClient.getUsers(
-                            logins = listOf(arguments.twitchUserName),
-                            token = token,
-                        )[arguments.twitchUserName]
-                            ?: relayError("cannot get user data for ${arguments.twitchUserName}")
-
-                        val segments = httpClient.getSchedule(
-                            token = token,
-                            broadcasterId = userData.id,
-                        )
-                            .filter { arguments.includeCancelled || (it.canceledUntil == null && it.vacationCancelledUntil == null) }
-                            .take(arguments.amount)
-                            .toList().distinct()
-
-                        segments.forEach {
-                            this@TwitchExtension.logger.debugF { it }
+                ephemeralSubCommand(::TwitchScheduleDeleteArgs) {
+                    name = "delete"
+                    description = "delete all events for a twitch user"
+                    requireBotPermissions(
+                        Permission.ManageEvents,
+                    )
+                    check {
+                        with(configurationExtension) { requiresBotControl() }
+                    }
+                    action {
+                        withLogContext(event, guild) { guild ->
+                            val token = httpClient.getToken()
+                            val userData = httpClient.getUsers(
+                                logins = listOf(arguments.twitchUserName),
+                                token = token,
+                            )[arguments.twitchUserName]
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                            val existingEvents = guild.scheduledEvents
+                                .filter { event -> event.entityType == ScheduledEntityType.External }
+                                .filter { event ->
+                                    event.location?.contains("https://twitch.tv/${userData.login}") ?: false
+                                }
+                                .toList()
+                            val followUp = respond {
+                                content = """
+                    deleting ${existingEvents.size} events ...
+                """.trimIndent()
+                            }
+                            existingEvents.forEach { it.delete() }
+                            followUp.edit {
+                                content = """
+                    deleted ${existingEvents.size} events ✅
+                """.trimIndent()
+                            }
                         }
-
-                        if (segments.isNotEmpty()) {
-                            segments.joinToString("\n") { segment ->
-                                val title = segment.title.let {
-                                    if (segment.canceledUntil != null || segment.vacationCancelledUntil != null) {
-                                        "~~$it~~"
-                                    } else {
-                                        it
+                    }
+                }
+                ephemeralSubCommand(::TwitchScheduleListArgs) {
+                    name = "list"
+                    description = "list streamer schedule"
+                    requireBotPermissions(
+                        Permission.ManageEvents,
+                    )
+                    action {
+                        withLogContext(event, guild) { guild ->
+                            val token = httpClient.getToken()
+                            val userData = httpClient.getUsers(
+                                logins = listOf(arguments.twitchUserName),
+                                token = token,
+                            )[arguments.twitchUserName]
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                            val segments = httpClient.getSchedule(
+                                token = token,
+                                broadcasterId = userData.id,
+                            )
+                                .filter { arguments.includeCancelled || (it.canceledUntil == null && it.vacationCancelledUntil == null) }
+                                .take(arguments.amount)
+                                .toList().distinct()
+                            segments.forEach {
+                                this@TwitchExtension.logger.debugF { it }
+                            }
+                            if (segments.isNotEmpty()) {
+                                segments.joinToString("\n") { segment ->
+                                    val title = segment.title.let {
+                                        if (segment.canceledUntil != null || segment.vacationCancelledUntil != null) {
+                                            "~~$it~~"
+                                        } else {
+                                            it
+                                        }
                                     }
+                                    "${segment.startTime.toMessageFormat()}-${segment.endTime.toMessageFormat()} ${title}" +
+                                            (segment.category?.name?.let { " - $it" } ?: "")
+                                }.linesChunkedByMaxLength(2000)
+                                    .forEach {
+                                        respond { content = it }
+                                    }
+                            } else {
+                                respond {
+                                    content = "no schedule segments found"
                                 }
-                                "${segment.startTime.toMessageFormat()}-${segment.endTime.toMessageFormat()} ${title}" +
-                                        (segment.category?.name?.let { " - $it" } ?: "")
-                            }.linesChunkedByMaxLength(2000)
-                                .forEach {
-                                    respond { content = it }
-                                }
-                        } else {
-                            respond {
-                                content = "no schedule segments found"
                             }
                         }
                     }
                 }
             }
         }
-        */
     }
 
     private suspend fun add(
@@ -980,7 +951,7 @@ class TwitchExtension() : Extension(), Klogging {
                 }
                 val twitchUrl = "[twitch.tv/${userData.displayName}](https://twitch.tv/${userData.login})"
                 val message = if (vod != null) {
-                    val timestamp = RelativeTime.format(vod.createdAt.epochSeconds)
+                    val timestamp = TimestampType.RelativeTime.format(vod.createdAt.epochSeconds)
                     val cleanedVodTitle = vod.title
                         .replace("\\|\\|+".toRegex(), "|")
                     val vodUrl = "[${cleanedVodTitle}](${vod.url})"

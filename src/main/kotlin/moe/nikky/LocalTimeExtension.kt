@@ -1,16 +1,16 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.string
-import com.kotlindiscord.kord.extensions.commands.converters.impl.user
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
-import com.kotlindiscord.kord.extensions.extensions.ephemeralUserCommand
-import com.kotlindiscord.kord.extensions.storage.Data
-import com.kotlindiscord.kord.extensions.storage.StorageType
-import com.kotlindiscord.kord.extensions.storage.StorageUnit
-import com.kotlindiscord.kord.extensions.utils.suggestStringMap
+import dev.kordex.core.commands.Arguments
+import dev.kordex.core.commands.application.slash.ephemeralSubCommand
+import dev.kordex.core.commands.converters.impl.string
+import dev.kordex.core.commands.converters.impl.user
+import dev.kordex.core.extensions.Extension
+import dev.kordex.core.extensions.ephemeralSlashCommand
+import dev.kordex.core.extensions.ephemeralUserCommand
+import dev.kordex.core.storage.Data
+import dev.kordex.core.storage.StorageType
+import dev.kordex.core.storage.StorageUnit
+import dev.kordex.core.utils.suggestStringMap
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.User

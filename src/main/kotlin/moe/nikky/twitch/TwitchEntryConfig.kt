@@ -1,6 +1,6 @@
 package moe.nikky.twitch
 
-import com.kotlindiscord.kord.extensions.storage.Data
+import dev.kordex.core.storage.Data
 import dev.kord.common.entity.Snowflake
 import kotlinx.serialization.Serializable
 import net.peanuuutz.tomlkt.TomlComment

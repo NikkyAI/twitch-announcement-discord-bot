@@ -5,10 +5,10 @@ import br.com.colman.dicehelper.DiceNotation
 import br.com.colman.dicehelper.FixedDice
 import br.com.colman.dicehelper.RandomDice
 import br.com.colman.dicehelper.diceNotation
-import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.converters.impl.string
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
+import dev.kordex.core.commands.Arguments
+import dev.kordex.core.commands.converters.impl.string
+import dev.kordex.core.extensions.Extension
+import dev.kordex.core.extensions.publicSlashCommand
 import io.klogging.Klogging
 
 class DiceExtension() : Extension(), Klogging {

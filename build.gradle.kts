@@ -1,30 +1,36 @@
 @file:Suppress("GradlePackageUpdate")
 
+import dev.kordex.gradle.plugins.kordex.DataCollection
+
+
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
-    id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
-    application
+    id("dev.kordex.gradle.kordex")
 }
 
 group = "moe.nikky"
 version = "1.0-SNAPSHOT"
 
 repositories {
-    google()
-    mavenCentral()
-
-    maven(url = "https://oss.sonatype.org/content/repositories/snapshots") {
-        name = "Sonatype Snapshots (Legacy)"
-    }
-    maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
-        name = "Sonatype Snapshots"
-    }
+//    google()
+//    mavenCentral()
 }
 
-application {
-    mainClass.set("moe.nikky.MainKt")
+kordEx {
+    bot {
+        mainClass.set("moe.nikky.MainKt")
+        processDotEnv.set(true)
+        voice.set(false)
+        dataCollection.set(DataCollection.None)
+    }
+    addDependencies.set(true)
+    addRepositories.set(true)
+//    kordVersion.set("latest")
+//    kordExVersion.set("latest")
+//    module("extra-phishing")
+//    module("extra-pluralkit")
 }
 
 kotlin {
@@ -37,17 +43,15 @@ kotlin {
 }
 
 dependencies {
-    implementation("com.kotlindiscord.kord.extensions:kord-extensions:_")
-    implementation("com.kotlindiscord.kord.extensions:annotations:_")
-    implementation("com.kotlindiscord.kord.extensions:extra-phishing:_")
-    implementation("com.kotlindiscord.kord.extensions:extra-pluralkit:_")
-    ksp("com.kotlindiscord.kord.extensions:annotation-processor:_")
+//    implementation("com.kotlindiscord.kord.extensions:kord-extensions:_")
+//    implementation("com.kotlindiscord.kord.extensions:annotations:_")
+//    implementation("com.kotlindiscord.kord.extensions:extra-phishing:_")
+//    implementation("com.kotlindiscord.kord.extensions:extra-pluralkit:_")
+//    ksp("com.kotlindiscord.kord.extensions:annotation-processor:_")
 
 //    implementation("dev.kord:kord-core:_")
 
     implementation("dev.kord.x:emoji:_")
-
-//    implementation("dev.kord.cache:cache-map:_")
 
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:_")
 
@@ -65,27 +69,7 @@ dependencies {
 
     implementation("io.ktor:ktor-client-logging:_")
     implementation("org.slf4j:slf4j-api:_")
-
-    testImplementation(Testing.Junit.jupiter.api)
-    testRuntimeOnly(Testing.Junit.jupiter.engine)
 }
-
-java {
-//    sourceCompatibility = JavaVersion.VERSION_16
-//    targetCompatibility = JavaVersion.VERSION_16
-}
-
-//tasks.named("compileKotlin", org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask::class.java) {
-//    compilerOptions {
-//        freeCompilerArgs.add("-Xexport-kdoc")
-//    }
-//}
-
-//tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask> {
-//    compilerOptions {
-//        jvmTarget = "16"
-//    }
-//}
 
 tasks {
     test {

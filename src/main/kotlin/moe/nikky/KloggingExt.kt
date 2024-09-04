@@ -1,6 +1,6 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.extensions.Extension
+import dev.kordex.core.extensions.Extension
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Guild
 import dev.kord.core.entity.channel.GuildChannel
@@ -26,38 +26,32 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
-val DOCKER_RENDERER: RenderString = object: RenderString {
-    override fun invoke(e: LogEvent): String {
-        val loggerOrFile = e.items["file"] ?: e.logger
-        val message = "${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
-        val cleanedItems = e.items - "file"
-        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-        return message + maybeItems + maybeStackTrace
-    }
+val DOCKER_RENDERER: RenderString = RenderString { e ->
+    val loggerOrFile = e.items["file"] ?: e.logger
+    val message = "${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
+    val cleanedItems = e.items - "file"
+    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+    message + maybeItems + maybeStackTrace
 }
 
-val CUSTOM_RENDERER: RenderString = object: RenderString {
-    override fun invoke(e: LogEvent): String {
-        val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-        val time = e.timestamp.localString.substring(0..22)
-        val message = "$time ${e.level} $loggerOrFile : ${e.evalTemplate()}"
-        val cleanedItems = e.items - "file"
-        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-        return message + maybeItems + maybeStackTrace
-    }
+val CUSTOM_RENDERER: RenderString = RenderString { e ->
+    val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
+    val time = e.timestamp.localString.substring(0..22)
+    val message = "$time ${e.level} $loggerOrFile : ${e.evalTemplate()}"
+    val cleanedItems = e.items - "file"
+    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+    message + maybeItems + maybeStackTrace
 }
-val CUSTOM_RENDERER_ANSI: RenderString = object: RenderString {
-    override fun invoke(e: LogEvent): String {
-        val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
-        val time = e.timestamp.localString.substring(0..22)
-        val message = "$time ${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
-        val cleanedItems = e.items - "file"
-        val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
-        val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
-        return message + maybeItems + maybeStackTrace
-    }
+val CUSTOM_RENDERER_ANSI: RenderString = RenderString { e ->
+    val loggerOrFile = e.items["file"]?.let { ".($it)" } ?: e.logger
+    val time = e.timestamp.localString.substring(0..22)
+    val message = "$time ${e.level.colour5} $loggerOrFile : ${e.evalTemplate()}"
+    val cleanedItems = e.items - "file"
+    val maybeItems = if (cleanedItems.isNotEmpty()) " : $cleanedItems" else ""
+    val maybeStackTrace = if (e.stackTrace != null) "\n${e.stackTrace}" else ""
+    message + maybeItems + maybeStackTrace
 }
 
 //fun logFile(file: File, append: Boolean = false): SendString {

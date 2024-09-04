@@ -1,12 +1,12 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.DISCORD_FUCHSIA
-import com.kotlindiscord.kord.extensions.DISCORD_GREEN
-import com.kotlindiscord.kord.extensions.commands.Arguments
-import com.kotlindiscord.kord.extensions.commands.application.slash.ephemeralSubCommand
-import com.kotlindiscord.kord.extensions.commands.converters.impl.role
-import com.kotlindiscord.kord.extensions.extensions.Extension
-import com.kotlindiscord.kord.extensions.extensions.ephemeralSlashCommand
+import dev.kordex.core.DISCORD_FUCHSIA
+import dev.kordex.core.DISCORD_GREEN
+import dev.kordex.core.commands.Arguments
+import dev.kordex.core.commands.application.slash.ephemeralSubCommand
+import dev.kordex.core.commands.converters.impl.role
+import dev.kordex.core.extensions.Extension
+import dev.kordex.core.extensions.ephemeralSlashCommand
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
 import dev.kord.rest.builder.message.embed

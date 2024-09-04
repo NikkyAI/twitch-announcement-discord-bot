@@ -1,6 +1,6 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.storage.Data
+import dev.kordex.core.storage.Data
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.behavior.getChannelOfOrNull

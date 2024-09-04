@@ -1,12 +1,11 @@
 package moe.nikky
 
-import com.kotlindiscord.kord.extensions.ExtensibleBot
-import com.kotlindiscord.kord.extensions.i18n.SupportedLocales
-import com.kotlindiscord.kord.extensions.modules.extra.phishing.extPhishing
-import com.kotlindiscord.kord.extensions.storage.DataAdapter
-import com.kotlindiscord.kord.extensions.utils.env
-import com.kotlindiscord.kord.extensions.utils.envOrNull
-import com.kotlindiscord.kord.extensions.utils.getKoin
+import dev.kordex.core.ExtensibleBot
+import dev.kordex.core.i18n.SupportedLocales
+import dev.kordex.core.storage.DataAdapter
+import dev.kordex.core.utils.env
+import dev.kordex.core.utils.envOrNull
+import dev.kordex.core.utils.getKoin
 import dev.kord.common.entity.PresenceStatus
 import dev.kord.common.entity.Snowflake
 import dev.kord.gateway.PrivilegedIntent
@@ -75,9 +74,10 @@ suspend fun main() {
                 deletePaginatorOnTimeout = true
                 pingInReply = true
             }
-            extPhishing {
+
+//            extPhishing {
 //                appName = "Yuno"
-            }
+//            }
 //            extPluralKit()
         }
         presence {

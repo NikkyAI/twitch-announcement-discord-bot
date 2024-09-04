@@ -1,11 +1,12 @@
 package moe.nikky.checks
 
-import com.kotlindiscord.kord.extensions.checks.failed
-import com.kotlindiscord.kord.extensions.checks.nullMember
-import com.kotlindiscord.kord.extensions.checks.passed
-import com.kotlindiscord.kord.extensions.checks.types.CheckContext
+import dev.kordex.core.checks.failed
+import dev.kordex.core.checks.nullMember
+import dev.kordex.core.checks.passed
+import dev.kordex.core.checks.types.CheckContext
 import dev.kord.core.behavior.RoleBehavior
 import dev.kord.core.event.Event
+import dev.kordex.core.checks.memberFor
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.flow.toList
 
@@ -16,7 +17,7 @@ public suspend fun <T : Event> CheckContext<T>.hasRoleNullable(builder: suspend 
     }
 
     val logger = KotlinLogging.logger("moe.nikky.checks.hasRoleNullable")
-    val member = com.kotlindiscord.kord.extensions.checks.memberFor(event)
+    val member = memberFor(event)
 
     if (member == null) {
 

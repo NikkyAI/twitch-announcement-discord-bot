@@ -1,6 +1,6 @@
 package moe.nikky.twitch
 
-import com.kotlindiscord.kord.extensions.utils.envOrNull
+import dev.kordex.core.utils.envOrNull
 import io.klogging.Klogging
 import io.ktor.client.*
 import io.ktor.client.call.*

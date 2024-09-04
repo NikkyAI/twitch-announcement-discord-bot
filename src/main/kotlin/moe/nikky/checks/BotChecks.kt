@@ -1,9 +1,9 @@
 package moe.nikky.checks
 
-import com.kotlindiscord.kord.extensions.checks.hasPermission
-import com.kotlindiscord.kord.extensions.checks.types.CheckContext
-import com.kotlindiscord.kord.extensions.utils.getLocale
-import com.kotlindiscord.kord.extensions.utils.translate
+import dev.kordex.core.checks.hasPermission
+import dev.kordex.core.checks.types.CheckContext
+import dev.kordex.core.utils.getLocale
+import dev.kordex.core.utils.translate
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent

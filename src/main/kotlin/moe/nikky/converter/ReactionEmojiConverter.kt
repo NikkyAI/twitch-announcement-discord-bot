@@ -7,13 +7,10 @@
 
 package moe.nikky.converter
 
-import com.kotlindiscord.kord.extensions.DiscordRelayedException
-import com.kotlindiscord.kord.extensions.commands.Argument
-import com.kotlindiscord.kord.extensions.commands.CommandContext
-import com.kotlindiscord.kord.extensions.commands.converters.*
-import com.kotlindiscord.kord.extensions.modules.annotations.converters.Converter
-import com.kotlindiscord.kord.extensions.modules.annotations.converters.ConverterType
-import com.kotlindiscord.kord.extensions.parser.StringParser
+import dev.kordex.core.DiscordRelayedException
+import dev.kordex.core.commands.Argument
+import dev.kordex.core.commands.CommandContext
+import dev.kordex.core.commands.converters.*
 import dev.kord.common.annotation.KordPreview
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.entity.ReactionEmoji
@@ -22,6 +19,9 @@ import dev.kord.core.entity.interaction.StringOptionValue
 import dev.kord.rest.builder.interaction.OptionsBuilder
 import dev.kord.rest.builder.interaction.StringChoiceBuilder
 import dev.kord.x.emoji.Emojis
+import dev.kordex.core.annotations.converters.Converter
+import dev.kordex.core.annotations.converters.ConverterType
+import dev.kordex.parser.StringParser
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
 
@@ -43,7 +43,6 @@ import kotlinx.coroutines.flow.mapNotNull
 
     types = [ConverterType.LIST, ConverterType.OPTIONAL, ConverterType.SINGLE]
 )
-@OptIn(KordPreview::class)
 public class ReactionEmojiConverter(
     override var validator: Validator<ReactionEmoji> = null,
 ) : SingleConverter<ReactionEmoji>() {
