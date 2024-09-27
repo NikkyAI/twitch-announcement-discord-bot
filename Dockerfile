@@ -18,4 +18,4 @@ COPY --from=build --chown=user:user /home/gradle/src/build/libs/application.jar 
 ENV DOCKER_LOGGING="true"
 ENV JVM_OPTS="-XX:MaxRAMPercentage=75.0"
 
-ENTRYPOINT ["java", "$JVM_OPTS", "-jar", "/app/application.jar"]
+ENTRYPOINT java $JVM_OPTS -jar /app/application.jar

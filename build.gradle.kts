@@ -1,5 +1,7 @@
 @file:Suppress("GradlePackageUpdate")
 
+//import dev.kordex.gradle.plugins.docker.file.DockerfileCommand
+//import dev.kordex.gradle.plugins.docker.file.add
 import dev.kordex.gradle.plugins.kordex.DataCollection
 
 
@@ -9,25 +11,28 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.github.johnrengelman.shadow")
     id("dev.kordex.gradle.kordex")
+//    id("dev.kordex.gradle.docker") version "1.4.2"
 }
 
 group = "moe.nikky"
 version = "1.0-SNAPSHOT"
 
-repositories {
-//    google()
-//    mavenCentral()
-}
-
+//docker {
+//    generateOnBuild = true
+//    target = file("test_DockerFile")
+//    commands {
+////        add(DockerfileCommand)
+//    }
+//}
 kordEx {
     bot {
-        mainClass.set("moe.nikky.MainKt")
-        processDotEnv.set(true)
-        voice.set(false)
-        dataCollection.set(DataCollection.None)
+        mainClass = "moe.nikky.MainKt"
+        processDotEnv = true
+        voice = false
+        dataCollection = DataCollection.None
     }
-    addDependencies.set(true)
-    addRepositories.set(true)
+    addDependencies = true
+    addRepositories = true
 //    kordVersion.set("latest")
 //    kordExVersion.set("latest")
 //    module("extra-phishing")
