@@ -62,9 +62,9 @@ suspend fun main() {
             add(::BotInfoExtension)
             add(::DiceExtension)
             add(::RoleManagementExtension)
-            add(::TwitchExtension)
+//            add(::TwitchExtension)
             add(::LocalTimeExtension)
-//            add(::SchedulingExtension)
+            add(::SchedulingExtension)
             if (TEST_GUILD_ID != null) {
                 add(::TestExtension)
             }
