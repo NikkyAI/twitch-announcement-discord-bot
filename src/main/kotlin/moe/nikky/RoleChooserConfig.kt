@@ -10,6 +10,7 @@ import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.Role
 import dev.kord.core.entity.channel.TextChannel
 import dev.kord.rest.request.KtorRequestException
+import dev.kordex.core.i18n.toKey
 import io.github.xn32.json5k.SerialComment
 import io.klogging.context.logContext
 import io.klogging.logger
@@ -44,7 +45,7 @@ data class RoleChooserConfig(
             logContext("guild" to guildBehavior.name)
         ) {
             guildBehavior.getChannelOfOrNull<TextChannel>(channelId)
-                ?: relayError("channel $channelId in '${guildBehavior.name}' could not be loaded as TextChannel")
+                ?: relayError("channel $channelId in '${guildBehavior.name}' could not be loaded as TextChannel".toKey())
         }
     }
 
@@ -56,7 +57,7 @@ data class RoleChooserConfig(
                 channel(guildBehavior).getMessageOrNull(messageId)
             } catch (e: KtorRequestException) {
                 logger.errorF { e.message }
-                relayError("cannot access message $messageId")
+                relayError("cannot access message $messageId".toKey())
             }
         }
     }

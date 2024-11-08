@@ -7,6 +7,7 @@ import dev.kordex.core.checks.types.CheckContext
 import dev.kord.core.behavior.RoleBehavior
 import dev.kord.core.event.Event
 import dev.kordex.core.checks.memberFor
+import dev.kordex.core.i18n.toKey
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.flow.toList
 
@@ -36,10 +37,7 @@ public suspend fun <T : Event> CheckContext<T>.hasRoleNullable(builder: suspend 
                 logger.failed("Member $member does not have role $role")
 
                 fail(
-                    translate(
-                        "checks.hasRole.failed",
-                        replacements = arrayOf(role.mention),
-                    )
+                        "checks.hasRole.failed".toKey(), //.translate(role.mention),
                 )
             }
         } else {

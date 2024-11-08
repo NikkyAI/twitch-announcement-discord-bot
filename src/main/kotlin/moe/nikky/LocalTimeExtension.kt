@@ -15,6 +15,7 @@ import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.User
 import dev.kord.rest.builder.message.embed
+import dev.kordex.core.i18n.toKey
 import io.klogging.Klogging
 import io.ktor.client.request.forms.*
 import io.ktor.utils.io.*
@@ -60,12 +61,12 @@ class LocalTimeExtension : Extension(), Klogging {
     override suspend fun setup() {
 
         ephemeralSlashCommand(::TimezoneArgs) {
-            name = "timezone"
-            description = "list or set timezones"
+            name = "timezone".toKey()
+            description = "list or set timezones".toKey()
 
             ephemeralSubCommand(::TimezoneArgs) {
-                name = "set"
-                description = "update your timezone"
+                name = "set".toKey()
+                description = "update your timezone".toKey()
 
                 action {
                     withLogContext(event, guild) { guild ->
@@ -118,8 +119,8 @@ class LocalTimeExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand() {
-                name = "list"
-                description = "sends a list of valid timezones"
+                name = "list".toKey()
+                description = "sends a list of valid timezones".toKey()
 
                 action {
                     withLogContext(event, guild) { guild ->
@@ -144,7 +145,7 @@ class LocalTimeExtension : Extension(), Klogging {
         }
 
         ephemeralUserCommand {
-            name = "Local Time"
+            name = "Local Time".toKey()
 
             action {
                 withLogContext(event, guild) { guild ->
@@ -162,8 +163,8 @@ class LocalTimeExtension : Extension(), Klogging {
             }
         }
         ephemeralSlashCommand(::TimezoneTargetArgs) {
-            name = "LocalTime"
-            description = "get the local time for a user"
+            name = "LocalTime".toKey()
+            description = "get the local time for a user".toKey()
 
             action {
                 withLogContext(event, guild) { guild ->
@@ -224,8 +225,8 @@ class LocalTimeExtension : Extension(), Klogging {
 
     inner class TimezoneArgs : Arguments() {
         val timezoneId by string {
-            name = "timezone"
-            description = "time zone id"
+            name = "timezone".toKey()
+            description = "time zone id".toKey()
 
             autoComplete { event ->
                 val now = Clock.System.now()
@@ -248,8 +249,8 @@ class LocalTimeExtension : Extension(), Klogging {
 
     inner class TimezoneTargetArgs : Arguments() {
         val user by user {
-            name = "user"
-            description = "user to get local time for"
+            name = "user".toKey()
+            description = "user to get local time for".toKey()
         }
     }
 }

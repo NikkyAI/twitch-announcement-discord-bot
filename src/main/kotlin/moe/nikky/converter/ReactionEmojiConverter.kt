@@ -19,8 +19,13 @@ import dev.kord.core.entity.interaction.StringOptionValue
 import dev.kord.rest.builder.interaction.OptionsBuilder
 import dev.kord.rest.builder.interaction.StringChoiceBuilder
 import dev.kord.x.emoji.Emojis
+import dev.kordex.core.annotations.InternalAPI
 import dev.kordex.core.annotations.converters.Converter
 import dev.kordex.core.annotations.converters.ConverterType
+import dev.kordex.core.commands.ChoiceOptionWrapper
+import dev.kordex.core.commands.OptionWrapper
+import dev.kordex.core.i18n.toKey
+import dev.kordex.core.i18n.types.Key
 import dev.kordex.parser.StringParser
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
@@ -46,7 +51,7 @@ import kotlinx.coroutines.flow.mapNotNull
 public class ReactionEmojiConverter(
     override var validator: Validator<ReactionEmoji> = null,
 ) : SingleConverter<ReactionEmoji>() {
-    override val signatureTypeString: String = "converters.reactionemoji.signatureType"
+    override val signatureType = "converters.reactionemoji.signatureType".toKey()
 
     override suspend fun parse(parser: StringParser?, context: CommandContext, named: String?): Boolean {
         val arg: String = named ?: parser?.parseNext()?.data ?: return false
@@ -67,7 +72,7 @@ public class ReactionEmojiConverter(
                 }.firstOrNull()
             } catch (e: NumberFormatException) {
                 throw DiscordRelayedException(
-                    context.translate("converters.emoji.error.invalid", replacements = arrayOf(id))
+                    "converters.emoji.error.invalid".toKey() // .translate(id)
                 )
             }
         } else { // ID or name
@@ -90,14 +95,14 @@ public class ReactionEmojiConverter(
             ReactionEmoji.from(guildEmoji)
         } else {
             val unicodeEmoji = Emojis[arg] ?: throw DiscordRelayedException(
-                "Value `$arg` is not a valid emoji."
+                "Value `$arg` is not a valid emoji.".toKey()
             )
             ReactionEmoji.Unicode(unicodeEmoji.unicode)
         }
     }
 
-    override suspend fun toSlashOption(arg: Argument<*>): OptionsBuilder =
-        StringChoiceBuilder(arg.displayName, arg.description).apply { required = true }
+    @OptIn(InternalAPI::class)
+    override suspend fun toSlashOption(arg: Argument<*>): OptionWrapper<*> = ChoiceOptionWrapper.String(arg.displayName, arg.description) { required = true }
 
     override suspend fun parseOption(context: CommandContext, option: OptionValue<*>): Boolean {
         val optionValue = (option as? StringOptionValue)?.value ?: return false

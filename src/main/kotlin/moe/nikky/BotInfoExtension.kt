@@ -10,6 +10,7 @@ import dev.kordex.core.extensions.ephemeralSlashCommand
 import dev.kord.common.entity.Permission
 import dev.kord.common.entity.Permissions
 import dev.kord.rest.builder.message.embed
+import dev.kordex.core.i18n.toKey
 import io.klogging.Klogging
 import io.ktor.http.*
 import kotlinx.coroutines.flow.count
@@ -50,8 +51,8 @@ class BotInfoExtension : Extension(), Klogging {
 
     inner class SetAdminRoleArgs : Arguments() {
         val role by role {
-            name = "role"
-            description = "admin role"
+            name = "role".toKey()
+            description = "admin role".toKey()
         }
     }
 
@@ -59,12 +60,12 @@ class BotInfoExtension : Extension(), Klogging {
         val self = kord.getSelf()
 
         ephemeralSlashCommand {
-            name = "bot"
-            description = "${self.username} related commands"
+            name = "bot".toKey()
+            description = "${self.username} related commands".toKey()
 
             ephemeralSubCommand() {
-                name = "show-config"
-                description = "shows the current configuration of (${self.username} ${self.mention})"
+                name = "show-config".toKey()
+                description = "shows the current configuration of (${self.username} ${self.mention})".toKey()
                 allowInDms = false
 
                 check {
@@ -110,8 +111,8 @@ class BotInfoExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "invite"
-                description = "get invite url"
+                name = "invite".toKey()
+                description = "get invite url".toKey()
 
                 action {
                     withLogContextOptionalGuild(event, guild) { guild ->
@@ -124,8 +125,8 @@ class BotInfoExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "stats"
-                description = "shows some numbers about (${self.username} ${self.mention})"
+                name = "stats".toKey()
+                description = "shows some numbers about (${self.username} ${self.mention})".toKey()
                 action {
                     val roleManagement: RoleManagementExtension? = getKoin().getOrNull()
                     val twitch: TwitchExtension? = getKoin().getOrNull()

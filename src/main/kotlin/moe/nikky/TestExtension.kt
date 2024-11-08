@@ -23,6 +23,8 @@ import dev.kord.common.entity.optional.optional
 import dev.kord.core.behavior.createScheduledEvent
 import dev.kord.core.entity.Guild
 import dev.kord.core.event.message.MessageCreateEvent
+import dev.kordex.core.i18n.toKey
+import dev.kordex.core.i18n.types.Key
 import io.klogging.Klogging
 import kotlinx.coroutines.flow.toList
 import kotlinx.datetime.Clock
@@ -42,8 +44,8 @@ class TestExtension : Extension(), Klogging {
 
     override suspend fun setup() {
         publicSlashCommand(::SlapArgs) {
-            name = "slap"
-            description = "Get slapped!"
+            name = "slap".toKey()
+            description = "Get slapped!".toKey()
 
             action {
                 // Because of the DslMarker annotation KordEx uses, we need to grab Kord explicitly
@@ -62,8 +64,8 @@ class TestExtension : Extension(), Klogging {
             }
         }
         publicSlashCommand(::BonkArgs) {
-            name = "bonk"
-            description = "bonk"
+            name = "bonk".toKey()
+            description = "bonk".toKey()
 
             action {
                 // Because of the DslMarker annotation KordEx uses, we need to grab Kord explicitly
@@ -193,13 +195,13 @@ class TestExtension : Extension(), Klogging {
     inner class SlapArgs : Arguments() {
         // A single user argument, required for the command to be able to run
         val target by optionalUser {
-            name = "target"
-            description = "Person you want to slap"
+            name = "target".toKey()
+            description = "Person you want to slap".toKey()
         }
         private val nullableWeapon by optionalEnumChoice<Weapon> {
-            name = "weapon"
-            description = "What you want to slap with"
-            typeName = "weapon"
+            name = "weapon".toKey()
+            description = "What you want to slap with".toKey()
+            typeName = "weapon".toKey()
         }
         val weapon: Weapon get() = nullableWeapon ?: Weapon.Trout
     }
@@ -207,32 +209,32 @@ class TestExtension : Extension(), Klogging {
     inner class BonkArgs : Arguments() {
         // A single user argument, required for the command to be able to run
         val target by user {
-            name = "target"
-            description = "Person that needs a bonk"
+            name = "target".toKey()
+            description = "Person that needs a bonk".toKey()
         }
     }
 
-    enum class Weapon(override val readableName: String, val message: String) : ChoiceEnum {
-        Trout("trout", "their large, smelly trout"),
-        Stick("stick", "a stick"),
+    enum class Weapon(override val readableName: Key, val message: String) : ChoiceEnum {
+        Trout("trout".toKey(), "their large, smelly trout"),
+        Stick("stick".toKey(), "a stick"),
     }
 
     inner class ScheduleArgs : Arguments() {
         val title by string {
-            name = "title"
-            description = "scheduled event title"
+            name = "title".toKey()
+            description = "scheduled event title".toKey()
         }
         val description by optionalString {
-            name = "description"
-            description = "scheduled event description"
+            name = "description".toKey()
+            description = "scheduled event description".toKey()
         }
         val location by optionalString {
-            name = "location"
-            description = "event location"
+            name = "location".toKey()
+            description = "event location".toKey()
         }
         val delay: DateTimePeriod? by optionalDuration {
-            name = "delay"
-            description = "delay before the event starts"
+            name = "delay".toKey()
+            description = "delay before the event starts".toKey()
         }
     }
 

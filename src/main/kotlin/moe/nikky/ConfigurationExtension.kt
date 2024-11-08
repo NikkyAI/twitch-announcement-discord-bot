@@ -19,6 +19,7 @@ import dev.kord.core.behavior.GuildBehavior
 import dev.kord.core.entity.Role
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
+import dev.kordex.core.i18n.toKey
 import io.github.xn32.json5k.SerialComment
 import io.klogging.Klogging
 import kotlinx.serialization.Serializable
@@ -54,22 +55,22 @@ class ConfigurationExtension : Extension(), Klogging {
 
     inner class SetAdminRoleArgs : Arguments() {
         val role by role {
-            name = "role"
-            description = "admin role"
+            name = "role".toKey()
+            description = "admin role".toKey()
         }
     }
 
     override suspend fun setup() {
         val self = kord.getSelf()
         ephemeralSlashCommand {
-            name = "config"
+            name = "config".toKey()
 //            description = "${self.username} related commands"
-            description = "self.username related commands"
+            description = "self.username related commands".toKey()
             allowInDms = false
 
             ephemeralSubCommand(::SetAdminRoleArgs) {
-                name = "adminset"
-                description = "sets the admin role"
+                name = "adminset".toKey()
+                description = "sets the admin role".toKey()
 
                 check {
                     hasPermission(Permission.Administrator)
@@ -90,8 +91,8 @@ class ConfigurationExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "adminunset"
-                description = "clears admin role"
+                name = "adminunset".toKey()
+                description = "clears admin role".toKey()
                 check {
                     hasPermission(Permission.Administrator)
                 }
@@ -115,7 +116,7 @@ class ConfigurationExtension : Extension(), Klogging {
     }
 
     suspend fun CheckContext<Event>.requiresBotControl(locale: Locale) {
-        val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild")
+        val guild = guildFor(event)?.asGuildOrNull() ?: relayError("cannot load guild".toKey())
         val configUnit = guild.config()
         val guildConfig = configUnit.get()
         val adminRole = guildConfig?.adminRole(guild)

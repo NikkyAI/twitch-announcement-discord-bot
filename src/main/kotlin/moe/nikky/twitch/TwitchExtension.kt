@@ -43,6 +43,7 @@ import dev.kordex.core.commands.converters.impl.string
 import dev.kordex.core.commands.converters.impl.role
 import dev.kordex.core.extensions.Extension
 import dev.kordex.core.extensions.ephemeralSlashCommand
+import dev.kordex.core.i18n.toKey
 import dev.kordex.core.storage.StorageType
 import dev.kordex.core.storage.StorageUnit
 import dev.kordex.core.time.TimestampType
@@ -206,43 +207,43 @@ class TwitchExtension() : Extension(), Klogging {
 
     inner class TwitchAddArgs : Arguments() {
         val role by role {
-            name = "role"
-            description = "notification ping"
+            name = "role".toKey()
+            description = "notification ping".toKey()
         }
         val twitchUserName by string {
-            name = "twitch"
-            description = "Twitch username"
+            name = "twitch".toKey()
+            description = "Twitch username".toKey()
         }
         val channel by optionalChannel {
-            name = "channel"
-            description = "notification channel, defaults to current channel"
+            name = "channel".toKey()
+            description = "notification channel, defaults to current channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class TwitchRemoveArgs : Arguments() {
         val twitchUserName by string {
-            name = "twitch"
-            description = "Twitch username"
+            name = "twitch".toKey()
+            description = "Twitch username".toKey()
         }
         val channel by optionalChannel {
-            name = "channel"
-            description = "notification channel, defaults to current channel"
+            name = "channel".toKey()
+            description = "notification channel, defaults to current channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class TwitchScheduleSyncArgs : Arguments() {
         val twitchUserName by string {
-            name = "twitch"
-            description = "Twitch username"
+            name = "twitch".toKey()
+            description = "Twitch username".toKey()
         }
         val amount by defaultingInt {
             val validRange = 1..100
-            name = "max"
+            name = "max".toKey()
             defaultValue = 30
             description =
-                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue"
+                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue".toKey()
             validate {
                 failIfNot("$value is not in range $validRange") { value in validRange }
             }
@@ -251,42 +252,42 @@ class TwitchExtension() : Extension(), Klogging {
 
     inner class TwitchScheduleDeleteArgs : Arguments() {
         val twitchUserName by string {
-            name = "twitch"
-            description = "Twitch username"
+            name = "twitch".toKey()
+            description = "Twitch username".toKey()
         }
     }
 
     inner class TwitchScheduleListArgs : Arguments() {
         val twitchUserName by string {
-            name = "twitch"
-            description = "Twitch username"
+            name = "twitch".toKey()
+            description = "Twitch username".toKey()
         }
         val amount by defaultingInt {
             val validRange = 1..100
-            name = "max"
+            name = "max".toKey()
             defaultValue = 30
             description =
-                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue"
+                "amount of schedule entries to list, value between ${validRange.first} and ${validRange.last}, default: $defaultValue".toKey()
             validate {
                 failIfNot("$value is not in range $validRange") { value in validRange }
             }
         }
         val includeCancelled by defaultingBoolean {
-            name = "include_cancelled"
-            description = "also list cancelled events"
+            name = "include_cancelled".toKey()
+            description = "also list cancelled events".toKey()
             defaultValue = false
         }
     }
 
     override suspend fun setup() {
         ephemeralSlashCommand {
-            name = "twitch"
-            description = "twitch notifications"
+            name = "twitch".toKey()
+            description = "twitch notifications".toKey()
             allowInDms = false
 
             ephemeralSubCommand(::TwitchAddArgs) {
-                name = "add"
-                description = "be notified about more streamers"
+                name = "add".toKey()
+                description = "be notified about more streamers".toKey()
                 locking = true
 
                 check {
@@ -313,8 +314,8 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::TwitchRemoveArgs) {
-                name = "remove"
-                description = "removes a streamer from notifications"
+                name = "remove".toKey()
+                description = "removes a streamer from notifications".toKey()
 
                 check {
                     with(configurationExtension) { requiresBotControl() }
@@ -340,8 +341,8 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "list"
-                description = "lists all streamers in config"
+                name = "list".toKey()
+                description = "lists all streamers in config".toKey()
 
                 check {
                     with(configurationExtension) { requiresBotControl() }
@@ -397,8 +398,8 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "check"
-                description = "check permissions in channel"
+                name = "check".toKey()
+                description = "check permissions in channel".toKey()
 
                 requireBotPermissions(
                     *requiredPermissions
@@ -415,8 +416,8 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand {
-                name = "status"
-                description = "check status of twitch background loop"
+                name = "status".toKey()
+                description = "check status of twitch background loop".toKey()
 
                 check {
                     with(configurationExtension) { requiresBotControl() }
@@ -430,8 +431,8 @@ class TwitchExtension() : Extension(), Klogging {
             }
 
             ephemeralSubCommand() {
-                name = "cleanup"
-                description = "deletes old messages sent by the bot"
+                name = "cleanup".toKey()
+                description = "deletes old messages sent by the bot".toKey()
 //                requireBotPermissions(
 //                    Permission.ManageMessages,
 //                )
@@ -444,13 +445,13 @@ class TwitchExtension() : Extension(), Klogging {
                         val before = Clock.System.now() - 7.days
 
                         val webhooks = findWebhooks(channel = channel)
-                            ?: relayError("could not find assosciated webhook")
+                            ?: relayError("could not find assosciated webhook".toKey())
 
 
                         val messagesToDelete = webhooks.flatMap { webhook ->
                             val token = webhook.token ?: return@flatMap emptyList()
                             val messagesToDelete = channel.getMessagesBefore(
-                                messageId = channel.lastMessageId ?: relayError("empty channel"),
+                                messageId = channel.lastMessageId ?: relayError("empty channel".toKey()),
                                 limit = 1000,
                             )
                                 .filter {
@@ -494,11 +495,11 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
             }
-            group("schedule") {
-                description = "twitch schedule sync"
+            group("schedule".toKey()) {
+                description = "twitch schedule sync".toKey()
                 ephemeralSubCommand(::TwitchScheduleSyncArgs) {
-                    name = "sync"
-                    description = "synchronize schedule"
+                    name = "sync".toKey()
+                    description = "synchronize schedule".toKey()
                     requireBotPermissions(
                         Permission.ManageEvents,
                     )
@@ -512,7 +513,7 @@ class TwitchExtension() : Extension(), Klogging {
                                 logins = listOf(arguments.twitchUserName),
                                 token = token,
                             )[arguments.twitchUserName]
-                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}".toKey())
                             val segments = httpClient.getSchedule(
                                 token = token,
                                 broadcasterId = userData.id,
@@ -619,8 +620,8 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
                 ephemeralSubCommand(::TwitchScheduleDeleteArgs) {
-                    name = "delete"
-                    description = "delete all events for a twitch user"
+                    name = "delete".toKey()
+                    description = "delete all events for a twitch user".toKey()
                     requireBotPermissions(
                         Permission.ManageEvents,
                     )
@@ -634,7 +635,7 @@ class TwitchExtension() : Extension(), Klogging {
                                 logins = listOf(arguments.twitchUserName),
                                 token = token,
                             )[arguments.twitchUserName]
-                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}".toKey())
                             val existingEvents = guild.scheduledEvents
                                 .filter { event -> event.entityType == ScheduledEntityType.External }
                                 .filter { event ->
@@ -656,8 +657,8 @@ class TwitchExtension() : Extension(), Klogging {
                     }
                 }
                 ephemeralSubCommand(::TwitchScheduleListArgs) {
-                    name = "list"
-                    description = "list streamer schedule"
+                    name = "list".toKey()
+                    description = "list streamer schedule".toKey()
                     requireBotPermissions(
                         Permission.ManageEvents,
                     )
@@ -668,7 +669,7 @@ class TwitchExtension() : Extension(), Klogging {
                                 logins = listOf(arguments.twitchUserName),
                                 token = token,
                             )[arguments.twitchUserName]
-                                ?: relayError("cannot get user data for ${arguments.twitchUserName}")
+                                ?: relayError("cannot get user data for ${arguments.twitchUserName}".toKey())
                             val segments = httpClient.getSchedule(
                                 token = token,
                                 broadcasterId = userData.id,
@@ -714,7 +715,7 @@ class TwitchExtension() : Extension(), Klogging {
         val channelInput = arguments.channel ?: currentChannel.asChannel()
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
             ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
-            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
+            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}".toKey())
 
         val user = try {
             val token = httpClient.getToken()
@@ -723,11 +724,11 @@ class TwitchExtension() : Extension(), Klogging {
                 logins = listOf(arguments.twitchUserName)
             )
             userData[arguments.twitchUserName.lowercase()]
-                ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>")
+                ?: relayError("cannot fetch user data: $userData for <https://twitch.tv/${arguments.twitchUserName}>".toKey())
         } catch (e: IllegalStateException) {
             relayError(
-                e.message
-                    ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>"
+                e.message?.toKey()
+                    ?: "unknown error fetching user data for <https://twitch.tv/${arguments.twitchUserName}>".toKey()
             )
         }
 
@@ -755,14 +756,14 @@ class TwitchExtension() : Extension(), Klogging {
         val channelInput = arguments.channel ?: currentChannel.asChannel()
         val channel = guild.getChannelOfOrNull<TextChannel>(channelInput.id)
             ?: guild.getChannelOfOrNull<NewsChannel>(channelInput.id)
-            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}")
+            ?: relayError("must be a TextChannel or NewsChannel, was: ${channelInput.type}".toKey())
 
         val configUnit = guild.config()
         val twitchGuildConfig = configUnit.get() ?: TwitchGuildConfig()
         val (key, toRemove) = twitchGuildConfig.find(
             channelId = channel.id,
             twitchUserName = arguments.twitchUserName
-        ) ?: relayError("twitch config entry not found")
+        ) ?: relayError("twitch config entry not found".toKey())
 
         try {
             toRemove.messageId?.let {
@@ -773,7 +774,7 @@ class TwitchExtension() : Extension(), Klogging {
         }
 
         configUnit.save(
-            configUnit.get()?.remove(key) ?: relayError("failed to save config")
+            configUnit.get()?.remove(key) ?: relayError("failed to save config".toKey())
         )
 
         return "removed ${arguments.twitchUserName} from ${channel.mention}"
@@ -864,7 +865,7 @@ class TwitchExtension() : Extension(), Klogging {
                     twitchConfig.copy(
                         messageId = message.id
                     )
-                ) ?: relayError("failed to save config")
+                ) ?: relayError("failed to save config".toKey())
             )
         }
 

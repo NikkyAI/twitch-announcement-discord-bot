@@ -9,14 +9,15 @@ import dev.kordex.core.commands.Arguments
 import dev.kordex.core.commands.converters.impl.string
 import dev.kordex.core.extensions.Extension
 import dev.kordex.core.extensions.publicSlashCommand
+import dev.kordex.core.i18n.toKey
 import io.klogging.Klogging
 
 class DiceExtension() : Extension(), Klogging {
     override val name: String = "dice"
     override suspend fun setup() {
         publicSlashCommand(::DiceArgs) {
-            name = "dice"
-            description = "rolls dice"
+            name = "dice".toKey()
+            description = "rolls dice".toKey()
             allowInDms = true
 
             action {
@@ -45,8 +46,8 @@ class DiceExtension() : Extension(), Klogging {
 
     inner class DiceArgs : Arguments() {
         val notation by string {
-            name = "notation"
-            description = "dices to roll"
+            name = "notation".toKey()
+            description = "dices to roll".toKey()
         }
     }
 }

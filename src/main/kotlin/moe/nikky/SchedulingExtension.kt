@@ -34,6 +34,7 @@ import dev.kord.core.entity.interaction.followup.EphemeralFollowupMessage
 import dev.kord.rest.builder.message.actionRow
 import dev.kord.x.emoji.DiscordEmoji
 import dev.kord.x.emoji.from
+import dev.kordex.core.i18n.toKey
 import dev.kordex.core.utils.from
 import io.klogging.Klogging
 import kotlinx.coroutines.runBlocking
@@ -228,36 +229,36 @@ class SchedulingExtension() : Extension(), Klogging {
 
     inner class SchedulingCreateArgs : Arguments() {
         val id by string {
-            name = "id"
-            description = "id of the event"
+            name = "id".toKey()
+            description = "id of the event".toKey()
         }
         val name by string {
-            name = "name"
-            description = "name of the event"
+            name = "name".toKey()
+            description = "name of the event".toKey()
         }
         val description by string {
-            name = "description"
-            description = "freeform event description"
+            name = "description".toKey()
+            description = "freeform event description".toKey()
 //            defaultValue = "a new cool event"
         }
         val startTime by string {
-            name = "start"
-            description = "supports discord timestamps hammertime"
+            name = "start".toKey()
+            description = "supports discord timestamps hammertime".toKey()
             validate {
-                tryParseInstant(value) ?: fail("failed to parse $value")
+                tryParseInstant(value) ?: fail("failed to parse $value".toKey())
             }
         }
         val endTime by string {
-            name = "end"
-            description = "supports discord timestamps hammertime"
+            name = "end".toKey()
+            description = "supports discord timestamps hammertime".toKey()
             validate {
-                tryParseInstant(value) ?: fail("failed to parse $value")
+                tryParseInstant(value) ?: fail("failed to parse $value".toKey())
             }
         }
 
         val slotLength by long {
-            name = "slotlength"
-            description = "slot length in minutes"
+            name = "slotlength".toKey()
+            description = "slot length in minutes".toKey()
 //            choices(
 //                listOf(
 //                    15,
@@ -324,8 +325,8 @@ class SchedulingExtension() : Extension(), Klogging {
 
     inner class SignupArgs : Arguments() {
         val event by stringChoice {
-            name = "event"
-            description = "Select a event"
+            name = "event".toKey()
+            description = "Select a event".toKey()
 //            validate {
 //                val schedulingData = this.context.getGuild()!!.config().get() ?: SchedulingData()
 //                failIfNot("unknown event '$value'") {
@@ -367,13 +368,13 @@ class SchedulingExtension() : Extension(), Klogging {
     override suspend fun setup() {
 
         ephemeralSlashCommand {
-            name = "scheduling"
-            description = "create and edit open signup events"
+            name = "scheduling".toKey()
+            description = "create and edit open signup events".toKey()
             allowInDms = false
 
             ephemeralSubCommand(::SchedulingCreateArgs) {
-                name = "create"
-                description = "register a new event"
+                name = "create".toKey()
+                description = "register a new event".toKey()
 
 
                 requireBotPermissions(
@@ -474,8 +475,8 @@ class SchedulingExtension() : Extension(), Klogging {
                 }
             }
             ephemeralSubCommand {
-                name = "list"
-                description = "list events"
+                name = "list".toKey()
+                description = "list events".toKey()
 
                 action {
                     withLogContext(event, guild) { guild ->

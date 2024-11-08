@@ -6,6 +6,7 @@ import dev.kord.core.entity.Guild
 import dev.kord.core.entity.channel.GuildChannel
 import dev.kord.core.event.Event
 import dev.kord.core.event.interaction.InteractionCreateEvent
+import dev.kordex.core.i18n.toKey
 import io.klogging.context.logContext
 import io.klogging.events.LogEvent
 import io.klogging.logger
@@ -141,7 +142,7 @@ suspend fun <E : Event, T> Extension.withLogContext(
     guildBehavior: GuildBehavior?,
     block: suspend CoroutineScope.(Guild) -> T,
 ): T {
-    val guild = guildBehavior?.asGuild() ?: relayError("cannot load guild")
+    val guild = guildBehavior?.asGuild() ?: relayError("cannot load guild".toKey())
     val items = mutableListOf<Pair<String, String?>>()
     if (event is InteractionCreateEvent) {
         items += "channel" to (event.interaction.channel.asChannel() as? GuildChannel)?.name

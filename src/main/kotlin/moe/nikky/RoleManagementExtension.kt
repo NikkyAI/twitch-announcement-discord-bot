@@ -45,6 +45,7 @@ import dev.kord.core.live.live
 import dev.kord.core.live.onReactionAdd
 import dev.kord.core.live.onReactionRemove
 import dev.kord.rest.request.KtorRequestException
+import dev.kordex.core.i18n.toKey
 import io.github.xn32.json5k.Json5
 import io.klogging.Klogging
 import kotlinx.coroutines.CoroutineName
@@ -100,97 +101,97 @@ class RoleManagementExtension : Extension(), Klogging {
 
     inner class AddRoleArg : Arguments() {
         val section by string {
-            name = "section"
-            description = "Section Title"
+            name = "section".toKey()
+            description = "Section Title".toKey()
         }
         val reaction by reactionEmoji {
-            name = "emoji"
-            description = "Reaction Emoji"
+            name = "emoji".toKey()
+            description = "Reaction Emoji".toKey()
         }
         val role by role {
-            name = "role"
-            description = "Role"
+            name = "role".toKey()
+            description = "Role".toKey()
         }
         val channel by optionalChannel {
-            name = "channel"
-            description = "channel"
+            name = "channel".toKey()
+            description = "channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class ListRoleArg : Arguments() {
         val channel by optionalChannel {
-            name = "channel"
-            description = "channel"
+            name = "channel".toKey()
+            description = "channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class RemoveRoleArg : Arguments() {
         val section by string {
-            name = "section"
-            description = "Section Title"
+            name = "section".toKey()
+            description = "Section Title".toKey()
         }
         val reaction by reactionEmoji {
-            name = "emoji"
-            description = "Reaction Emoji"
+            name = "emoji".toKey()
+            description = "Reaction Emoji".toKey()
         }
         val channel by optionalChannel {
-            name = "channel"
-            description = "channel"
+            name = "channel".toKey()
+            description = "channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class RenameSectionArg : Arguments() {
         val oldSection by string {
-            name = "old"
-            description = "OLD Section Title"
+            name = "old".toKey()
+            description = "OLD Section Title".toKey()
         }
         val newSection by string {
-            name = "section"
-            description = "NEW Section Title"
+            name = "section".toKey()
+            description = "NEW Section Title".toKey()
         }
         val channel by optionalChannel {
-            name = "channel"
-            description = "channel"
+            name = "channel".toKey()
+            description = "channel".toKey()
             requireChannelType(ChannelType.GuildText)
         }
     }
 
     inner class CreateRoleArg : Arguments() {
         val name by string {
-            name = "name"
-            description = "role name"
+            name = "name".toKey()
+            description = "role name".toKey()
         }
         val color by optionalColor {
-            name = "color"
-            description = "role color"
+            name = "color".toKey()
+            description = "role color".toKey()
         }
         val mentionable by defaultingBoolean {
-            name = "mentionable"
-            description = "pingable"
+            name = "mentionable".toKey()
+            description = "pingable".toKey()
             defaultValue = false
         }
     }
 
     inner class ImportRoleArg : Arguments() {
         val data by string {
-            name = "data"
-            description = "json5 encoded role data"
+            name = "data".toKey()
+            description = "json5 encoded role data".toKey()
         }
     }
 
     override suspend fun setup() {
         ephemeralSlashCommand {
-            name = "reactionRole"
-            description = "manage reaction roles"
+            name = "reactionRole".toKey()
+            description = "manage reaction roles".toKey()
             allowInDms = false
             requireBotPermissions(Permission.ManageRoles)
 
             ephemeralSubCommand(::AddRoleArg) {
-                name = "add"
-                description = "adds a new reaction to role mapping"
+                name = "add".toKey()
+                description = "adds a new reaction to role mapping".toKey()
 
                 check {
                     with(config) { requiresBotControl() }
@@ -217,8 +218,8 @@ class RoleManagementExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::ListRoleArg) {
-                name = "list"
-                description = "lists all configured reaction roles"
+                name = "list".toKey()
+                description = "lists all configured reaction roles".toKey()
 
                 check {
                     with(config) { requiresBotControl() }
@@ -245,8 +246,8 @@ class RoleManagementExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::RenameSectionArg) {
-                name = "update-section"
-                description = "to fix a mistyped section name or such"
+                name = "update-section".toKey()
+                description = "to fix a mistyped section name or such".toKey()
 
                 check {
                     with(config) { requiresBotControl() }
@@ -273,8 +274,8 @@ class RoleManagementExtension : Extension(), Klogging {
             }
 
             ephemeralSubCommand(::RemoveRoleArg) {
-                name = "remove"
-                description = "removes a role mapping"
+                name = "remove".toKey()
+                description = "removes a role mapping".toKey()
 
                 check {
                     with(config) { requiresBotControl() }
@@ -299,8 +300,8 @@ class RoleManagementExtension : Extension(), Klogging {
                 }
             }
             ephemeralSubCommand {
-                name = "check"
-                description = "check permissions in channel"
+                name = "check".toKey()
+                description = "check permissions in channel".toKey()
 
                 requireBotPermissions(
                     *requiredPermissions,
@@ -368,14 +369,14 @@ class RoleManagementExtension : Extension(), Klogging {
         }
 
         ephemeralSlashCommand {
-            name = "role"
-            description = "create a new role"
+            name = "role".toKey()
+            description = "create a new role".toKey()
             allowInDms = false
             requireBotPermissions(Permission.ManageRoles)
 
             ephemeralSubCommand(::CreateRoleArg) {
-                name = "create"
-                description = "creates a new role"
+                name = "create".toKey()
+                description = "creates a new role".toKey()
 
                 requireBotPermissions(
                     Permission.ManageRoles,
@@ -387,7 +388,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 action {
                     withLogContext(event, guild) { guild ->
                         if(guild.roles.any { it.name == arguments.name }) {
-                            relayError("a role with that name already exists")
+                            relayError("a role with that name already exists".toKey())
                         }
                         val role = guild.createRole {
                             name = arguments.name
@@ -405,8 +406,8 @@ class RoleManagementExtension : Extension(), Klogging {
 
 
             ephemeralSubCommand(::ImportRoleArg) {
-                name = "import"
-                description = "creates many roles"
+                name = "import".toKey()
+                description = "creates many roles".toKey()
 
                 requireBotPermissions(
                     Permission.ManageRoles,
@@ -424,7 +425,7 @@ class RoleManagementExtension : Extension(), Klogging {
                         val duplicates = guild.roles.filter { it.name in data.keys }.toList()
                         if(duplicates.isNotEmpty()) {
                             relayError(
-                                "roles with the following roles already exist: ${duplicates.joinToString(" ") { it.mention }}"
+                                "roles with the following roles already exist: ${duplicates.joinToString(" ") { it.mention }}".toKey()
                             )
                         }
                         val roles = data.map { (roleName, roleColor) ->
@@ -545,7 +546,7 @@ class RoleManagementExtension : Extension(), Klogging {
         currentChannel: ChannelBehavior,
     ): String {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
-            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
+            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel".toKey())
         }
 
         val configUnit = guild.config()
@@ -563,7 +564,7 @@ class RoleManagementExtension : Extension(), Klogging {
                     it.key(channel) to it
                 }.also {
                     configUnit.save(
-                        configUnit.get()?.update(it.first, it.second) ?: relayError("failed to save config")
+                        configUnit.get()?.update(it.first, it.second) ?: relayError("failed to save config".toKey())
                     )
                 }
             }
@@ -574,11 +575,11 @@ class RoleManagementExtension : Extension(), Klogging {
 
         configUnit.save(
             configUnit.get()?.updateRoleMapping(key, arguments.reaction, arguments.role)
-                ?: relayError("failed to save config")
+                ?: relayError("failed to save config".toKey())
         )
 
         val (_, newRoleChooserConfig) = configUnit.get()?.find(arguments.section, channel.id)
-            ?: relayError("could not find role chooser section")
+            ?: relayError("could not find role chooser section".toKey())
 
         val newRoleMapping = newRoleChooserConfig.roleMapping
         message.edit {
@@ -610,13 +611,13 @@ class RoleManagementExtension : Extension(), Klogging {
         currentChannel: ChannelBehavior,
     ): String {
         val channel = (arguments.channel ?: currentChannel).asChannel().let { channel ->
-            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel")
+            channel as? TextChannel ?: relayError("${channel.mention} is not a Text Channel".toKey())
         }
 
         val configUnit = guild.config()
 
         val roleChoosers = configUnit.get()?.list(channelId = channel.id)
-            ?: relayError("failed to load config")
+            ?: relayError("failed to load config".toKey())
 
         return roleChoosers.map { roleChooserConfig ->
             val message = roleChooserConfig.getMessageOrRelayError(guild)
@@ -975,9 +976,8 @@ private suspend fun parseColor(input: String, context: CommandContext): Color? {
         input.startsWith("0x") -> Color(input.substring(2).toInt(16))
         input.all { it.isDigit() } -> Color(input.toInt())
 
-        else -> ColorParser.parse(input, context.getLocale()) ?: throw DiscordRelayedException(
-            context.translate("converters.color.error.unknown", replacements = arrayOf(input))
-        )
+        else -> ColorParser.parse(input, context.getLocale())
+            ?: throw DiscordRelayedException("converters.color.error.unknown".toKey())
     }
 }
 
