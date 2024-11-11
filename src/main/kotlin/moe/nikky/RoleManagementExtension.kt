@@ -387,7 +387,7 @@ class RoleManagementExtension : Extension(), Klogging {
 
                 action {
                     withLogContext(event, guild) { guild ->
-                        if(guild.roles.any { it.name == arguments.name }) {
+                        if (guild.roles.any { it.name == arguments.name }) {
                             relayError("a role with that name already exists".toKey())
                         }
                         val role = guild.createRole {
@@ -421,9 +421,12 @@ class RoleManagementExtension : Extension(), Klogging {
                         val json5 = Json5 {
 
                         }
-                        val data = json5.decodeFromString(MapSerializer(String.serializer(), String.serializer()), arguments.data)
+                        val data = json5.decodeFromString(
+                            MapSerializer(String.serializer(), String.serializer()),
+                            arguments.data
+                        )
                         val duplicates = guild.roles.filter { it.name in data.keys }.toList()
-                        if(duplicates.isNotEmpty()) {
+                        if (duplicates.isNotEmpty()) {
                             relayError(
                                 "roles with the following roles already exist: ${duplicates.joinToString(" ") { it.mention }}".toKey()
                             )
@@ -564,7 +567,10 @@ class RoleManagementExtension : Extension(), Klogging {
                     it.key(channel) to it
                 }.also {
                     configUnit.save(
-                        configUnit.get()?.update(it.first, it.second) ?: relayError("failed to save config".toKey())
+                        (configUnit.get() ?: RoleManagementConfig()).update(
+                            it.first,
+                            it.second
+                        ) // ?: relayError("failed to save config (add)".toKey())
                     )
                 }
             }
@@ -574,7 +580,8 @@ class RoleManagementExtension : Extension(), Klogging {
         val message = getOrCreateMessage(key, roleChooserConfig, guild)
 
         configUnit.save(
-            configUnit.get()?.updateRoleMapping(key, arguments.reaction, arguments.role)
+            (configUnit.get() ?: RoleManagementConfig())
+                .updateRoleMapping(key, arguments.reaction, arguments.role)
                 ?: relayError("failed to save config".toKey())
         )
 
@@ -673,7 +680,7 @@ class RoleManagementExtension : Extension(), Klogging {
         val message = getOrCreateMessage(key, roleChooserConfig, guild)
 
         val newConfig = configUnit.save(
-            configUnit.get()?.deleteRoleMapping(key, reactionEmoji) ?: relayError("failed to save config")
+            (configUnit.get() ?: RoleManagementConfig()).deleteRoleMapping(key, reactionEmoji) ?: relayError("failed to save config")
         )
         val (newKey, newRoleChooser) = newConfig.find(arguments.section, channel.id)
             ?: relayError("no role selection section ${arguments.section}")
@@ -784,7 +791,7 @@ class RoleManagementExtension : Extension(), Klogging {
                         val config = guild.config()
 
                         config.save(
-                            config.get()?.updateMessage(key, it.id) ?: relayError("failed to save config")
+                            (config.get() ?: RoleManagementConfig()).updateMessage(key, it.id) ?: relayError("failed to save config")
                         )
                     }
             }
@@ -806,7 +813,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 .sortedByDescending { (_, role) ->
                     role.rawPosition
                 }
-                .map {(entry, role) ->
+                .map { (entry, role) ->
                     val emoji = entry.reactionEmoji(guild)
                     "${emoji.mention} ${role.mention}"
                 }
@@ -820,7 +827,7 @@ class RoleManagementExtension : Extension(), Klogging {
                 .sortedByDescending { (_, role) ->
                     role.rawPosition
                 }
-                .map {(entry, role) ->
+                .map { (entry, role) ->
                     val emoji = entry.reactionEmoji(guild)
                     "${emoji.mention} `${role.name}`"
                 }
@@ -911,6 +918,7 @@ data class RoleManagementConfig(
     fun update(key: String, newValue: RoleChooserConfig): RoleManagementConfig {
         return copy(roleChoosers = roleChoosers + (key to newValue))
     }
+
     fun updateMessage(key: String, messageId: Snowflake): RoleManagementConfig? {
         val newValue = roleChoosers[key]?.copy(
             messageId = messageId
@@ -920,6 +928,7 @@ data class RoleManagementConfig(
 
         return copy(roleChoosers = roleChoosers + (key to newValue))
     }
+
     fun updateSection(key: String, section: String): RoleManagementConfig? {
         val newValue = roleChoosers[key]?.copy(
             section = section
@@ -933,8 +942,8 @@ data class RoleManagementConfig(
     fun find(section: String, channelId: Snowflake): Pair<String, RoleChooserConfig>? {
         return roleChoosers.entries.firstOrNull { (key, value) ->
             value.section == section && value.channelId == channelId
-        }?.let {
-            (key, value) -> key to value
+        }?.let { (key, value) ->
+            key to value
         }
     }
 
@@ -943,7 +952,7 @@ data class RoleManagementConfig(
     }
 
     fun deleteRoleMapping(key: String, emoji: ReactionEmoji): RoleManagementConfig? {
-        val oldRoleChooser = roleChoosers[key]?: run {
+        val oldRoleChooser = roleChoosers[key] ?: run {
             return null
         }
 
@@ -953,13 +962,19 @@ data class RoleManagementConfig(
 
         return copy(roleChoosers = roleChoosers + (key to newValue))
     }
+
     fun updateRoleMapping(key: String, emoji: ReactionEmoji, role: Role): RoleManagementConfig? {
         val oldRoleChooser = deleteRoleMapping(key, emoji)?.roleChoosers?.get(key) ?: run {
             return null
         }
 
         val newValue = oldRoleChooser.copy(
-            roleMapping = oldRoleChooser.roleMapping + RoleMappingConfig(emoji.idOrUnicode(), emoji.name, role.id, role.name)
+            roleMapping = oldRoleChooser.roleMapping + RoleMappingConfig(
+                emoji.idOrUnicode(),
+                emoji.name,
+                role.id,
+                role.name
+            )
         )
 
         return copy(roleChoosers = roleChoosers + (key to newValue))
@@ -982,7 +997,7 @@ private suspend fun parseColor(input: String, context: CommandContext): Color? {
 }
 
 private fun ReactionEmoji.idOrUnicode(): String {
-    return when(this) {
+    return when (this) {
         is ReactionEmoji.Custom -> id.toString()
         is ReactionEmoji.Unicode -> name
     }

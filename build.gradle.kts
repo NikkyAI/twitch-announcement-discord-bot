@@ -1,9 +1,6 @@
 @file:Suppress("GradlePackageUpdate")
 
-//import dev.kordex.gradle.plugins.docker.file.DockerfileCommand
-//import dev.kordex.gradle.plugins.docker.file.add
 import dev.kordex.gradle.plugins.kordex.DataCollection
-
 
 plugins {
     kotlin("jvm")
@@ -12,6 +9,7 @@ plugins {
     id("com.github.johnrengelman.shadow")
     id("dev.kordex.gradle.kordex")
 //    id("dev.kordex.gradle.docker") version "1.4.2"
+    id("dev.reformator.stacktracedecoroutinator")
 }
 
 group = "moe.nikky"
@@ -105,4 +103,7 @@ tasks {
 //            }
 //        }
 //    }
+}
+stacktraceDecoroutinator {
+    enabled = true
 }
