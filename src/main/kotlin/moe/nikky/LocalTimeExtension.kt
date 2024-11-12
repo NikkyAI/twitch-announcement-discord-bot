@@ -26,12 +26,22 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import org.koin.dsl.module
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.ZERO
 import kotlin.time.Duration.Companion.seconds
 
 class LocalTimeExtension : Extension(), Klogging {
     override val name: String = "localtime"
+    init {
+        bot.getKoin().loadModules(
+            listOf(
+                module {
+                    single { this@LocalTimeExtension }
+                }
+            )
+        )
+    }
 
     private val userConfig = StorageUnit(
         StorageType.Config,
@@ -40,7 +50,7 @@ class LocalTimeExtension : Extension(), Klogging {
         TimezoneConfig::class
     )
 
-    private fun GuildBehavior.config(userId: Snowflake) =
+    fun GuildBehavior.config(userId: Snowflake) =
         userConfig
             .withGuild(id)
             .withUser(userId)

@@ -452,7 +452,6 @@ class RoleManagementExtension : Extension(), Klogging {
         event<GuildCreateEvent> {
             action {
                 withLogContext(event, event.guild) { guild ->
-                    migrateConfig(guild)
 
 //                    val textChannels = guild.channels.filter { it is TextChannel }
 
@@ -738,7 +737,7 @@ class RoleManagementExtension : Extension(), Klogging {
             }
         }
 
-        val (key, roleChooserConfig) = configUnit.get()!!.find(
+        val (key, roleChooserConfig) = configUnit.get()?.find(
             section = arguments.newSection,
             channelId = channel.id
         ) ?: relayError("no roleselection section ${arguments.oldSection}")
@@ -752,7 +751,7 @@ class RoleManagementExtension : Extension(), Klogging {
             ) ?: relayError("failed to update config")
         )
 
-        val (_, newRoleChooserConfig) = configUnit.get()!!.find(
+        val (_, newRoleChooserConfig) = configUnit.get()?.find(
             section = arguments.newSection,
             channelId = channel.id
         ) ?: relayError("no roleselection section ${arguments.newSection}")
@@ -866,48 +865,6 @@ class RoleManagementExtension : Extension(), Klogging {
 
     suspend fun loadConfig(guild: GuildBehavior): RoleManagementConfig? {
         return guild.config().get()
-    }
-
-    suspend fun migrateConfig(guild: GuildBehavior) {
-//        try {
-//            val oldConfig = StorageUnit(
-//                storageType = StorageType.Config,
-//                namespace = name,
-//                identifier = "role-management",
-//                dataType = RoleManagementConfig::class
-//            ).withGuild(guild).get() ?: return
-//
-//            val newData = RoleManagementConfig(
-//                roleChoosers = oldConfig.roleChoosers.mapValues { (_, roleChooserConfig) ->
-//                    roleChooserConfig.copy(
-//                        roleMapping = roleChooserConfig.roleMapping.map { mapping ->
-//
-//                            val emoji = if(mapping.emoji.startsWith("<") && mapping.emoji.endsWith(">")) {
-//                                val id = mapping.emoji.substringAfterLast(":").substringBefore(">")
-//                                guild.emojis.firstOrNull { it.id.toString() == id }
-//                            } else {
-//                                guild.emojis.firstOrNull { it.name == mapping.emoji || it.id.toString() == mapping.emoji }
-//                            }
-//                            if(emoji != null) {
-//                                mapping.copy(
-//                                    emojiName = emoji.name,
-//                                    emoji = emoji.id.toString(),
-//                                )
-//                            } else {
-//                                mapping.copy(
-//                                    emojiName = mapping.emoji
-//                                )
-//                            }
-//                        }
-//                    )
-//                }
-//            )
-//            guild.config().save(newData)
-//            return
-//        } catch (e: Exception) {
-//
-//        }
-
     }
 }
 
